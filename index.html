@@ -1088,21 +1088,24 @@ async function lhSearch(){
   if(!q){ alert('Введите домен'); return; }
   log('info', 'Поиск домена: '+q);
   const res = document.getElementById('lh-search-results');
-  res.innerHTML = '<div style="font-size:11px;color:var(--text3)">⟳ Поиск...</div>';
+  res.innerHTML = '<div style="font-size:11px;color:var(--text3)">Поиск...</div>';
   const data = await lhReq('GET', '/public/api/domains/search?domain='+encodeURIComponent(q));
   if(!data){ res.innerHTML = ''; return; }
   const items = Array.isArray(data) ? data : (data.domains || data.results || [data]);
   if(!items.length){ res.innerHTML = '<div style="font-size:11px;color:var(--text3)">Ничего не найдено</div>'; return; }
-  res.innerHTML = items.map(d => {
+  let html = '';
+  items.forEach(function(d){
     const avail = d.available !== false;
+    const name = d.domain || d.name || q;
     const price = d.price ? '$'+d.price : '';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-top:5px;font-size:12px">
-      <span style="color:var(--blue);font-weight:500">${d.domain||d.name||q}</span>
-      <span style="color:${avail?'var(--green)':'var(--red)'}">${avail?'✓ Доступен':'✗ Занят'}</span>
-      ${price ? '<span style="color:var(--text3)">'+price+'</span>' : ''}
-      ${avail ? '<button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="lhBuyOne(''+( d.domain||d.name||q)+'')">🛒 Купить</button>' : ''}
-    </div>`;
-  }).join('');
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-top:5px;font-size:12px">';
+    html += '<span style="color:var(--blue);font-weight:500">' + name + '</span>';
+    html += '<span style="color:' + (avail ? 'var(--green)' : 'var(--red)') + '">' + (avail ? '✓ Доступен' : '✗ Занят') + '</span>';
+    if(price) html += '<span style="color:var(--text3)">' + price + '</span>';
+    if(avail) html += "<button class='btn btn-sm btn-primary' style='margin-left:auto' onclick='lhBuyOne(" + JSON.stringify(name) + ")'>Купить</button>";
+    html += '</div>';
+  });
+  res.innerHTML = html;
 }
 
 async function lhBulkSearch(){
@@ -1114,19 +1117,21 @@ async function lhBulkSearch(){
   const data = await lhReq('POST', '/public/api/domains/search/bulk', { domains: lines });
   const items = Array.isArray(data) ? data : (data?.domains || data?.results || []);
   let avail=0;
-  document.getElementById('lh-bulk-results').innerHTML = items.map(d => {
+  let bulkHtml = '';
+  items.forEach(d => {
     const isAvail = d.available !== false;
     if(isAvail) avail++;
     const price = d.price ? '$'+d.price : '';
     const id = d.domain||d.name||'';
-    return `<div class="d-row-head" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
-      ${isAvail ? '<input type="checkbox" class="d-checkbox" onchange="toggleLhSelect(''+id+'',this.checked)">' : '<span style="width:14px"></span>'}
-      <span class="d-name">${id}</span>
-      ${price ? '<span style="font-size:11px;color:var(--text3)">'+price+'</span>' : ''}
-      <span class="pill ${isAvail?'pill-done':'pill-error'}">${isAvail?'доступен':'занят'}</span>
-      ${isAvail ? '<button class="btn btn-sm btn-primary" onclick="lhBuyOne(''+id+'')">🛒</button>' : ''}
-    </div>`;
-  }).join('') || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
+    bulkHtml += '<div class="d-row-head" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">';
+    bulkHtml += isAvail ? '<input type="checkbox" class="d-checkbox" onchange="toggleLhSelect(\'' + id + '\',this.checked)">' : '<span style="width:14px;display:inline-block"></span>';
+    bulkHtml += '<span class="d-name">'+id+'</span>';
+    if(price) bulkHtml += '<span style="font-size:11px;color:var(--text3)">'+price+'</span>';
+    bulkHtml += '<span class="pill '+(isAvail?'pill-done':'pill-error')+'">'+(isAvail?'доступен':'занят')+'</span>';
+    if(isAvail) bulkHtml += "<button class='btn btn-sm btn-primary' onclick='lhBuyOne(" + JSON.stringify(id) + ")'>🛒</button>";
+    bulkHtml += '</div>';
+  });
+  document.getElementById('lh-bulk-results').innerHTML = bulkHtml || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
   document.getElementById('lh-bulk-stat').textContent = `Доступно: ${avail} из ${items.length}`;
   log('ok', `Проверено: ${items.length}, доступно: ${avail}`);
 }
