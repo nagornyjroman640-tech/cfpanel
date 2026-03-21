@@ -470,19 +470,21 @@ nav{flex:1;padding:8px;overflow-y:auto}
 
       <!-- LUXHOST TAB -->
       <div class="tab-pane" id="tab-luxhost">
-        <div style="display:grid;grid-template-columns:220px 1fr;gap:14px">
+
+        <!-- Row 1: Balance + Search -->
+        <div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start">
+
+          <!-- Balance card -->
           <div class="card">
             <div class="card-head"><span>💰</span><span class="card-title">Баланс</span></div>
-            <div class="card-body" style="text-align:center;padding:16px">
-              <div id="lh-balance" style="font-family:var(--sans);font-weight:800;font-size:32px;color:var(--green)">—</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:4px">USD</div>
-              <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="lhGetBalance()">🔄 Обновить</button>
-              <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
-                <div style="font-size:11px;color:var(--text2);margin-bottom:8px;text-align:left">Пополнить баланс</div>
-                <div style="display:flex;gap:6px;margin-bottom:8px">
-                  <input type="number" id="lh-topup-amount" placeholder="Сумма $" min="1" style="flex:1;padding:6px 8px;font-size:12px">
-                </div>
-                <select id="lh-topup-currency" style="width:100%;margin-bottom:8px;padding:6px 8px;font-size:12px">
+            <div class="card-body" style="padding:16px">
+              <div id="lh-balance" style="font-family:var(--sans);font-weight:800;font-size:34px;color:var(--green);text-align:center">—</div>
+              <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:3px">USD</div>
+              <button class="btn" style="width:100%;justify-content:center;margin-top:10px" onclick="lhGetBalance()">🔄 Обновить</button>
+              <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500">Пополнить баланс</div>
+                <input type="number" id="lh-topup-amount" placeholder="Сумма в USD" min="1" style="margin-bottom:7px">
+                <select id="lh-topup-currency" style="margin-bottom:8px">
                   <option value="USDT_TRC20">USDT TRC20</option>
                   <option value="USDT_ERC20">USDT ERC20</option>
                   <option value="BTC">Bitcoin</option>
@@ -490,10 +492,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
                   <option value="LTC">Litecoin</option>
                 </select>
                 <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="lhCreateInvoice()">💳 Создать счёт</button>
+                <div id="lh-invoice-result" style="margin-top:8px"></div>
               </div>
-              <div id="lh-invoice-result" style="margin-top:10px"></div>
             </div>
           </div>
+
+          <!-- Search -->
           <div class="card">
             <div class="card-head"><span>🔍</span><span class="card-title">Проверить домен</span></div>
             <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
@@ -501,32 +505,53 @@ nav{flex:1;padding:8px;overflow-y:auto}
                 <input type="text" id="lh-search-input" placeholder="example.com" style="flex:1" onkeydown="if(event.key==='Enter')lhSearch()">
                 <button class="btn btn-primary" onclick="lhSearch()">🔍 Проверить</button>
               </div>
-              <div id="lh-search-results" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+              <div id="lh-search-results" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
             </div>
           </div>
         </div>
+
+        <!-- Cart -->
+        <div class="card" id="lh-cart-card" style="display:none">
+          <div class="card-head">
+            <span>🛒</span>
+            <span class="card-title">Корзина</span>
+            <span class="card-meta" id="lh-cart-count">0 доменов</span>
+            <span style="margin-left:auto;font-family:var(--sans);font-weight:700;font-size:14px;color:var(--accent)" id="lh-cart-total">$0.00</span>
+            <button class="btn btn-sm" style="margin-left:12px" onclick="lhClearCart()">🗑 Очистить</button>
+            <button class="btn btn-sm btn-primary" style="margin-left:6px" onclick="lhBuyCart()">✅ Купить все</button>
+          </div>
+          <div class="card-body" style="padding:10px 12px;max-height:200px;overflow-y:auto">
+            <div id="lh-cart-list" style="display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+        </div>
+
+        <!-- Bulk search -->
         <div class="card">
           <div class="card-head"><span>📋</span><span class="card-title">Массовая проверка</span><span class="card-meta">один домен на строку</span></div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
             <textarea id="lh-bulk-input" rows="4" placeholder="example.com&#10;mysite.org&#10;another.net"></textarea>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button class="btn btn-primary" onclick="lhBulkSearch()">🔍 Проверить все</button>
-              <button class="btn" onclick="lhBuySelected()">🛒 Купить выбранные</button>
+              <button class="btn" onclick="lhAddSelectedToCart()">🛒 Добавить выбранные в корзину</button>
               <span style="font-size:11px;color:var(--text3)" id="lh-bulk-stat"></span>
             </div>
-            <div id="lh-bulk-results" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+            <div id="lh-bulk-results" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
           </div>
         </div>
+
+        <!-- My domains -->
         <div class="card">
-          <div class="card-head"><span>🌐</span><span class="card-title">Мои домены в LuxHost</span><span class="card-meta" id="lh-domains-cnt">—</span>
+          <div class="card-head">
+            <span>🌐</span><span class="card-title">Мои домены в LuxHost</span>
+            <span class="card-meta" id="lh-domains-cnt">—</span>
             <button class="btn btn-sm" style="margin-left:8px" onclick="lhGetDomains()">🔄 Обновить</button>
           </div>
-          <div class="card-body" style="padding:10px 12px">
-            <div class="d-list" id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
+          <div class="card-body" style="padding:10px 12px;max-height:320px;overflow-y:auto">
+            <div id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
           </div>
         </div>
-      </div>
 
+      </div>
 
     </div>
   </main>
@@ -540,7 +565,7 @@ let newTplProxy=true, bulkProxy=true, bulkRecs=[];
 let unsub={};
 let expandedDomains=new Set(), selectedDomains=new Set();
 
-let lhDomains=[], lhSelected=new Map(); // Map<domain, price>
+let lhDomains=[];
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
 
 const PAGES={
@@ -595,10 +620,17 @@ function showApp(){
   document.getElementById('fb-pid').textContent=firebase.app().options.projectId||'—';
   subscribeAll(); loadCF();
   log('ok','Вошёл: '+user.email);
-  // Event delegation for dynamic buy buttons
+  // Event delegation for LuxHost dynamic buttons
   document.addEventListener('click', function(e){
-    if(e.target.dataset.act === 'buy' && e.target.dataset.domain){
-      lhBuyOne(e.target.dataset.domain);
+    const btn = e.target.closest('[data-act]');
+    if(!btn) return;
+    const act = btn.dataset.act;
+    if(act === 'addcart'){
+      lhAddToCart(btn.dataset.domain, btn.dataset.price);
+    } else if(act === 'removecart'){
+      lhRemoveFromCart(btn.dataset.domain);
+    } else if(act === 'setns'){
+      lhSetCfNs(btn.dataset.domainId, btn.dataset.domainName);
     }
   });
 }
@@ -1066,24 +1098,36 @@ function exportLogs(){ const a=document.createElement('a'); a.href='data:text/pl
 
 
 // ══ LUXHOST API ══
-function getLhToken(){ return document.getElementById('lh-token')?.value?.trim() || ''; }
+let lhCart = new Map(); // domain -> {price, priceRaw}
+
+function getLhToken(){
+  return document.getElementById('lh-token') ? document.getElementById('lh-token').value.trim() : '';
+}
 
 async function lhReq(method, path, body){
   const token = getLhToken();
   if(!token){ alert('Введите LuxHost API Token в Настройках'); return null; }
   try{
-    const opts = { method, headers: { 'Content-Type':'application/json', 'X-Target':'luxhost', 'X-API-Key': token } };
+    const opts = {
+      method: method,
+      headers: { 'Content-Type':'application/json', 'X-Target':'luxhost', 'X-API-Key': token }
+    };
     if(body && method !== 'GET') opts.body = JSON.stringify(body);
     const res = await fetch(PROXY_URL + path, opts);
-    return await res.json();
-  } catch(e){ log('err','LuxHost API: '+e.message); return null; }
+    const data = await res.json();
+    return data;
+  } catch(e){
+    log('err','LuxHost API ошибка: '+e.message);
+    return null;
+  }
 }
 
+// ── BALANCE ──
 async function lhGetBalance(){
   log('info','Запрос баланса LuxHost...');
   const data = await lhReq('GET', '/public/api/users/me');
-  if(!data){ log('err','Нет ответа от LuxHost'); return; }
-  const rawBal = data.balance ?? data.Balance ?? data.account_balance ?? null;
+  if(!data){ log('err','Нет ответа'); return; }
+  const rawBal = data.balance !== undefined ? data.balance : (data.Balance !== undefined ? data.Balance : null);
   if(rawBal !== null){
     // API returns cents (295 = $2.95)
     const balDisplay = (parseFloat(rawBal) / 100).toFixed(2);
@@ -1095,170 +1139,275 @@ async function lhGetBalance(){
   }
 }
 
+// ── CART ──
+function lhRenderCart(){
+  const card = document.getElementById('lh-cart-card');
+  const list = document.getElementById('lh-cart-list');
+  const count = document.getElementById('lh-cart-count');
+  const total = document.getElementById('lh-cart-total');
+
+  if(!lhCart.size){ card.style.display='none'; return; }
+  card.style.display='block';
+
+  let totalPrice = 0;
+  let html = '';
+  lhCart.forEach(function(item, domain){
+    totalPrice += item.price;
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">';
+    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+domain+'</span>';
+    html += '<span style="color:var(--accent);font-weight:600">$'+item.price.toFixed(2)+'</span>';
+    html += '<span class="del-btn" data-domain="'+domain+'" data-act="removecart">✕</span>';
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
+  count.textContent = lhCart.size + ' ' + (lhCart.size === 1 ? 'домен' : 'доменов');
+  total.textContent = '$' + totalPrice.toFixed(2);
+}
+
+function lhAddToCart(domain, priceRaw){
+  const price = priceRaw ? (parseFloat(priceRaw) / 100) : 0;
+  lhCart.set(domain, { price: price, priceRaw: priceRaw });
+  lhRenderCart();
+  log('ok', domain + ' добавлен в корзину' + (price ? ' ($'+price.toFixed(2)+')' : ''));
+}
+
+function lhRemoveFromCart(domain){
+  lhCart.delete(domain);
+  lhRenderCart();
+}
+
+function lhClearCart(){
+  lhCart.clear();
+  lhRenderCart();
+}
+
+async function lhBuyCart(){
+  if(!lhCart.size){ alert('Корзина пуста'); return; }
+  let total = 0;
+  lhCart.forEach(function(item){ total += item.price; });
+  const domains = Array.from(lhCart.keys());
+  if(!confirm('Купить ' + lhCart.size + ' доменов на сумму $' + total.toFixed(2) + '?\n\n' + domains.join('\n'))) return;
+  log('info', 'Начинаю покупку ' + lhCart.size + ' доменов...');
+  const toProcess = new Map(lhCart);
+  lhClearCart();
+  for(const [domain] of toProcess){
+    await lhBuyOne(domain);
+    await sleep(1200);
+  }
+  lhGetBalance();
+}
+
+// ── SEARCH ──
 async function lhSearch(){
   const q = document.getElementById('lh-search-input').value.trim();
   if(!q){ alert('Введите домен'); return; }
-  log('info', 'Поиск домена: '+q);
+  log('info', 'Поиск: '+q);
   const res = document.getElementById('lh-search-results');
   res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Поиск...</div>';
   const data = await lhReq('GET', '/public/api/domains/search?domain='+encodeURIComponent(q));
   if(!data){ res.innerHTML = ''; return; }
-  const items = Array.isArray(data) ? data : (data.domains || data.results || [data]);
-  if(!items.length){ res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Ничего не найдено</div>'; return; }
+
+  // Handle different response formats
+  let items = [];
+  if(Array.isArray(data)) items = data;
+  else if(data.domains) items = data.domains;
+  else if(data.results) items = data.results;
+  else if(data.domain) items = [data];
+  else items = [data];
+
+  // Deduplicate by domain name
+  const seen = new Set();
+  items = items.filter(function(d){
+    const name = d.domain || d.name || q;
+    if(seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+
+  if(!items.length){
+    res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Ничего не найдено</div>';
+    return;
+  }
+
   let html = '';
   items.forEach(function(d){
-    const avail = d.available !== false;
+    const avail = d.available !== false && d.available !== 0;
     const name = d.domain || d.name || q;
-    const rawPrice = d.price || d.cost || d.register_price || 0;
-    const price = rawPrice ? (parseFloat(rawPrice) / 100).toFixed(2) : null;
+    const rawPrice = d.price || d.cost || d.register_price || d.registrationPrice || 0;
+    const priceDisplay = rawPrice ? '$' + (parseFloat(rawPrice)/100).toFixed(2) : '';
+
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">';
-    html += '<span style="flex:1;color:var(--blue);font-weight:500">' + name + '</span>';
-    if(price) html += '<span style="color:var(--accent);font-weight:600">$' + price + '</span>';
-    html += '<span style="color:' + (avail ? 'var(--green)' : 'var(--red)') + ';font-size:10px">' + (avail ? '✓ Доступен' : '✗ Занят') + '</span>';
-    if(avail) html += '<button class="btn btn-sm btn-primary" data-domain="' + name + '" data-act="buy" style="white-space:nowrap">🛒 $' + (price||'?') + '</button>';
+    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+name+'</span>';
+    if(priceDisplay) html += '<span style="color:var(--accent);font-weight:600">'+priceDisplay+'</span>';
+    html += '<span style="font-size:10px;color:'+(avail?'var(--green)':'var(--red)')+'">'+( avail?'✓ Доступен':'✗ Занят')+'</span>';
+    if(avail){
+      html += '<button class="btn btn-sm btn-primary" data-domain="'+name+'" data-price="'+rawPrice+'" data-act="addcart">+ В корзину</button>';
+    }
     html += '</div>';
   });
   res.innerHTML = html;
 }
 
+// ── BULK SEARCH ──
 async function lhBulkSearch(){
-  const lines = document.getElementById('lh-bulk-input').value.split('\n').map(function(l){return l.trim().toLowerCase();}).filter(function(l){return l && l.includes('.');});
+  const lines = document.getElementById('lh-bulk-input').value.split('\n')
+    .map(function(l){ return l.trim().toLowerCase(); })
+    .filter(function(l){ return l && l.includes('.'); });
   if(!lines.length){ alert('Введите домены'); return; }
   log('info', 'Массовая проверка: '+lines.length+' доменов');
-  document.getElementById('lh-bulk-stat').textContent = 'Проверяю...';
-  lhSelected.clear();
+  document.getElementById('lh-bulk-stat').textContent = 'Проверяю ' + lines.length + ' доменов...';
+  document.getElementById('lh-bulk-results').innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Идёт проверка...</div>';
+
   const data = await lhReq('POST', '/public/api/domains/search/bulk', { domains: lines });
-  const items = Array.isArray(data) ? data : (data && (data.domains || data.results) ? (data.domains || data.results) : []);
-  let avail=0, totalAvailPrice=0;
-  let bulkHtml = '';
+  let items = [];
+  if(Array.isArray(data)) items = data;
+  else if(data && data.domains) items = data.domains;
+  else if(data && data.results) items = data.results;
+
+  let avail = 0, totalPrice = 0;
+  let html = '';
+
   items.forEach(function(d){
-    const isAvail = d.available !== false;
+    const isAvail = d.available !== false && d.available !== 0;
     if(isAvail) avail++;
     const id = d.domain || d.name || '';
-    const rawPrice = d.price || d.cost || d.register_price || 0;
-    const price = rawPrice ? parseFloat(rawPrice > 100 ? (rawPrice/100) : rawPrice).toFixed(2) : null;
-    if(isAvail && price) totalAvailPrice += parseFloat(price);
-    bulkHtml += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px">';
+    const rawPrice = d.price || d.cost || d.register_price || d.registrationPrice || 0;
+    const priceDisplay = rawPrice ? '$'+(parseFloat(rawPrice)/100).toFixed(2) : '—';
+    if(isAvail && rawPrice) totalPrice += parseFloat(rawPrice)/100;
+
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px">';
     if(isAvail){
-      bulkHtml += '<input type="checkbox" class="d-checkbox" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0" onchange="toggleLhSelect(\''+id+'\','+(price||0)+',this.checked)">';
+      html += '<input type="checkbox" class="lh-bulk-check" data-domain="'+id+'" data-price="'+rawPrice+'" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">';
     } else {
-      bulkHtml += '<span style="width:14px;display:inline-block;flex-shrink:0"></span>';
+      html += '<span style="width:14px;flex-shrink:0"></span>';
     }
-    bulkHtml += '<span style="flex:1;color:var(--blue);font-weight:500;font-size:12px">'+id+'</span>';
-    if(price) bulkHtml += '<span style="color:var(--accent);font-size:11px;font-weight:600">$'+price+'</span>';
-    bulkHtml += '<span class="pill '+(isAvail?'pill-done':'pill-error')+'" style="font-size:10px">'+(isAvail?'доступен':'занят')+'</span>';
-    if(isAvail) bulkHtml += '<button class="btn btn-sm btn-primary" data-domain="'+id+'" data-act="buy" style="white-space:nowrap">🛒</button>';
-    bulkHtml += '</div>';
+    html += '<span style="flex:1;color:var(--blue);font-weight:500;font-size:12px">'+id+'</span>';
+    html += '<span style="color:var(--accent);font-size:11px;font-weight:600">'+priceDisplay+'</span>';
+    html += '<span class="pill '+(isAvail?'pill-done':'pill-error')+'" style="font-size:10px">'+(isAvail?'доступен':'занят')+'</span>';
+    if(isAvail){
+      html += '<button class="btn btn-sm btn-primary" data-domain="'+id+'" data-price="'+rawPrice+'" data-act="addcart">+ Корзина</button>';
+    }
+    html += '</div>';
   });
-  document.getElementById('lh-bulk-results').innerHTML = bulkHtml || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
-  document.getElementById('lh-bulk-stat').textContent = 'Доступно: '+avail+' из '+items.length + (totalAvailPrice ? ' · Итого: $'+totalAvailPrice.toFixed(2) : '');
+
+  document.getElementById('lh-bulk-results').innerHTML = html || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
+  document.getElementById('lh-bulk-stat').textContent = 'Доступно: '+avail+' из '+items.length+(totalPrice ? ' · Итого: $'+totalPrice.toFixed(2) : '');
   log('ok', 'Проверено: '+items.length+', доступно: '+avail);
 }
 
-function toggleLhSelect(domain, price, checked){
-  if(checked){ lhSelected.set(domain, parseFloat(price)||0); }
-  else { lhSelected.delete(domain); }
-  updateLhTotal();
+function lhAddSelectedToCart(){
+  const checks = document.querySelectorAll('.lh-bulk-check:checked');
+  if(!checks.length){ alert('Отметьте домены галочками'); return; }
+  checks.forEach(function(cb){
+    lhAddToCart(cb.dataset.domain, cb.dataset.price);
+  });
 }
 
-function updateLhTotal(){
-  let total = 0;
-  lhSelected.forEach(price => total += price);
-  const stat = document.getElementById('lh-bulk-stat');
-  if(stat){
-    const count = lhSelected.size;
-    stat.textContent = count > 0 ? 'Выбрано: '+count+' доменов · Итого: $'+total.toFixed(2) : '';
-  }
-}
-
+// ── BUY ONE ──
 async function lhBuyOne(domain){
-  if(!confirm('Купить домен '+domain+'?')) return;
-  log('info', 'Покупка: '+domain);
-  const data = await lhReq('POST', '/public/api/domains/purchase', { domain });
-  if(data && !data.error){
-    log('ok', domain+' куплен! Запускаем автоматику...');
-    await autoSetupDomain(domain, data.id || data.domainId);
-  } else { log('err', 'Ошибка покупки '+domain+': '+(data?.error||data?.message||'неизвестно')); }
-}
-
-async function lhBuySelected(){
-  if(!lhSelected.size){ alert('Выберите домены галочками'); return; }
-  let total = 0; lhSelected.forEach(p => total += p);
-  if(!confirm('Купить '+lhSelected.size+' доменов на сумму $'+total.toFixed(2)+'?')) return;
-  for(const [domain] of lhSelected){
-    await lhBuyOne(domain);
-    await sleep(1000);
+  log('info', '['+domain+'] Покупка...');
+  const data = await lhReq('POST', '/public/api/domains/purchase', { domain: domain });
+  if(data && !data.error && !data.message){
+    log('ok', '['+domain+'] Куплен! Запускаем автоматику...');
+    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+  } else {
+    log('err', '['+domain+'] Ошибка покупки: '+(data ? (data.error || data.message || JSON.stringify(data)) : 'нет ответа'));
   }
-  lhSelected.clear(); updateLhTotal();
 }
 
+// ── AUTO SETUP (buy → CF zone → DNS → NS change) ──
 async function autoSetupDomain(domain, domainId){
   const cfToken = document.getElementById('cf-tok').value.trim();
   const cfAccount = document.getElementById('cf-acc').value.trim();
-  if(!cfToken || !cfAccount){ log('warn', 'CF токен не настроен — NS не обновлён'); return; }
+  if(!cfToken || !cfAccount){ log('warn', '['+domain+'] CF не настроен — пропускаем NS'); return; }
 
-  // 1. Create CF zone
-  log('info', '['+domain+'] Создаём зону в Cloudflare...');
+  log('info', '['+domain+'] Создаём зону в CF...');
   const zoneRes = await fetch(PROXY_URL+'/zones', {
     method:'POST',
     headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
     body: JSON.stringify({name:domain, account:{id:cfAccount}, jump_start:false})
   });
   const zoneData = await zoneRes.json();
-  if(!zoneData.success){ log('err','['+domain+'] CF зона: '+(zoneData.errors?.[0]?.message||'ошибка')); return; }
+
+  if(!zoneData.success){
+    log('err','['+domain+'] CF зона: '+(zoneData.errors ? zoneData.errors[0].message : 'ошибка'));
+    return;
+  }
 
   const zoneId = zoneData.result.id;
   const nsServers = zoneData.result.name_servers;
   log('ok', '['+domain+'] Зона создана. NS: '+nsServers.join(', '));
 
-  // 2. Apply template DNS records
+  // Apply template DNS records
   const recs = tplRecs;
-  for(const rec of recs){
+  for(let i=0; i<recs.length; i++){
+    const rec = recs[i];
     await fetch(PROXY_URL+'/zones/'+zoneId+'/dns_records', {
       method:'POST',
       headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
-      body: JSON.stringify({type:rec.type,name:rec.name,content:rec.value,ttl:rec.ttl,proxied:rec.proxied})
+      body: JSON.stringify({type:rec.type, name:rec.name, content:rec.value, ttl:rec.ttl, proxied:rec.proxied})
     });
   }
   if(recs.length) log('ok', '['+domain+'] Применено '+recs.length+' DNS записей');
 
-  // 3. Set NS at LuxHost
+  // Set NS at LuxHost
   if(domainId && nsServers.length){
     log('info', '['+domain+'] Меняем NS у LuxHost...');
     const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
-    if(nsRes && !nsRes.error){ log('ok', '['+domain+'] NS обновлены на CF серверы ✓'); }
-    else { log('warn', '['+domain+'] NS не обновлён: '+(nsRes?.error||nsRes?.message||'проверь вручную')); }
+    if(nsRes && !nsRes.error){
+      log('ok', '['+domain+'] NS обновлены ✓');
+    } else {
+      log('warn', '['+domain+'] NS: '+(nsRes ? (nsRes.error||nsRes.message||'?') : 'нет ответа'));
+    }
   }
 
-  // 4. Add to panel domains list
+  // Add domain to panel
   await db.collection('domains').add({
-    name: domain, status:'done', zoneId,
-    records: recs.map(r=>({type:r.type,name:r.name,value:r.value,ttl:r.ttl,proxied:r.proxied})),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: user.email
+    name: domain, status:'done', zoneId: zoneId,
+    records: recs.map(function(r){ return {type:r.type,name:r.name,value:r.value,ttl:r.ttl,proxied:r.proxied}; }),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    addedBy: user.email
   });
   log('ok', '['+domain+'] ✅ Полная автоматика завершена!');
-  lhGetBalance();
 }
 
+// ── MY DOMAINS ──
 async function lhGetDomains(){
   log('info', 'Загрузка доменов LuxHost...');
   const data = await lhReq('GET', '/public/api/domains/list');
-  const items = Array.isArray(data) ? data : (data?.domains || data?.items || data?.data || []);
+  let items = [];
+  if(Array.isArray(data)) items = data;
+  else if(data && data.domains) items = data.domains;
+  else if(data && data.items) items = data.items;
+  else if(data && data.data) items = data.data;
+
   lhDomains = items;
   document.getElementById('lh-domains-cnt').textContent = items.length + ' доменов';
   const list = document.getElementById('lh-domains-list');
-  if(!items.length){ list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>'; return; }
-  list.innerHTML = items.map(d => {
-    const exp = d.expiresAt || d.expiry || d.expired_at || '';
-    const ns = d.nameservers ? d.nameservers.join(', ') : '—';
-    return `<div class="d-row-head" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
-      <span class="d-name">${d.domain||d.name||d.id}</span>
-      ${exp ? '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>' : ''}
-      <span style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ns}</span>
-      <button class="btn btn-sm" onclick="lhSetCfNs('${d.id||d.domainId}','${d.domain||d.name}')">☁ NS → CF</button>
-    </div>`;
-  }).join('');
-  log('ok', 'Загружено доменов: '+items.length);
+
+  if(!items.length){
+    list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>';
+    return;
+  }
+
+  let html = '';
+  items.forEach(function(d){
+    const name = d.domain || d.name || d.id;
+    const exp = d.expiresAt || d.expiry || d.expired_at || d.expiration || '';
+    const ns = d.nameservers ? d.nameservers.join(', ') : (d.ns ? d.ns.join(', ') : '—');
+    const domId = d.id || d.domainId || d.domain_id || '';
+
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:4px">';
+    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+name+'</span>';
+    if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
+    html += '<span style="font-size:10px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+ns+'">'+ns+'</span>';
+    html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
+  log('ok', 'Загружено: '+items.length+' доменов');
 }
 
 async function lhSetCfNs(domainId, domain){
@@ -1266,14 +1415,15 @@ async function lhSetCfNs(domainId, domain){
   const cfAccount = document.getElementById('cf-acc').value.trim();
   if(!cfToken || !cfAccount){ alert('Настройте CF API Token и Account ID'); return; }
   if(!confirm('Сменить NS для '+domain+' на Cloudflare?')) return;
-  // Get NS from existing CF zone or create new
+
   log('info', '['+domain+'] Ищем зону в CF...');
   const listRes = await fetch(PROXY_URL+'/zones?name='+domain, {
-    headers:{'X-Target':'cloudflare','X-API-Key':cfToken}
+    headers:{'X-Target':'cloudflare','X-API-Key':cfToken,'Content-Type':'application/json'}
   });
   const listData = await listRes.json();
   let nsServers, zoneId;
-  if(listData.success && listData.result?.[0]){
+
+  if(listData.success && listData.result && listData.result[0]){
     nsServers = listData.result[0].name_servers;
     zoneId = listData.result[0].id;
     log('ok', '['+domain+'] Зона найдена: '+zoneId);
@@ -1285,43 +1435,48 @@ async function lhSetCfNs(domainId, domain){
       body: JSON.stringify({name:domain, account:{id:cfAccount}, jump_start:false})
     });
     const zoneData = await zoneRes.json();
-    if(!zoneData.success){ log('err','Ошибка CF: '+zoneData.errors?.[0]?.message); return; }
+    if(!zoneData.success){ log('err','Ошибка CF: '+(zoneData.errors?zoneData.errors[0].message:'?')); return; }
     nsServers = zoneData.result.name_servers;
     zoneId = zoneData.result.id;
     log('ok', '['+domain+'] Зона создана');
   }
-  // Set NS at LuxHost
+
   const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
-  if(nsRes && !nsRes.error){ log('ok', '['+domain+'] NS → '+nsServers.join(', ')+' ✓'); alert('✅ NS обновлены!'); }
-  else { log('err', '['+domain+'] Ошибка NS: '+(nsRes?.error||nsRes?.message||'?')); }
+  if(nsRes && !nsRes.error){
+    log('ok', '['+domain+'] NS → '+nsServers.join(', ')+' ✓');
+    alert('✅ NS обновлены!');
+  } else {
+    log('err', '['+domain+'] NS ошибка: '+(nsRes ? (nsRes.error||nsRes.message||'?') : '?'));
+  }
   lhGetDomains();
 }
 
-
+// ── INVOICE ──
 async function lhCreateInvoice(){
   const amount = document.getElementById('lh-topup-amount').value.trim();
   const currency = document.getElementById('lh-topup-currency').value;
   if(!amount || parseFloat(amount) <= 0){ alert('Введите сумму'); return; }
   log('info', 'Создаём счёт на $'+amount+' ('+currency+')...');
   const result = document.getElementById('lh-invoice-result');
-  result.innerHTML = '<div style="font-size:11px;color:var(--text3)">⟳ Создаю счёт...</div>';
-  const data = await lhReq('POST', '/public_api/payments/createInvoice', { amount: parseFloat(amount), currency });
+  result.innerHTML = '<div style="font-size:11px;color:var(--text3)">Создаю...</div>';
+  const data = await lhReq('POST', '/public_api/payments/createInvoice', { amount: parseFloat(amount)*100, currency: currency });
   if(!data || data.error){
-    result.innerHTML = '<div style="font-size:11px;color:var(--red)">Ошибка: '+(data?.error||data?.message||'неизвестно')+'</div>';
-    log('err', 'Ошибка создания счёта: '+(data?.error||data?.message));
+    result.innerHTML = '<div style="font-size:11px;color:var(--red)">Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа')+'</div>';
+    log('err', 'Ошибка создания счёта');
     return;
   }
   const payUrl = data.pay_url || data.url || data.payUrl || data.link || '';
   const address = data.address || data.wallet || '';
   const payAmount = data.pay_amount || data.amount_crypto || '';
-  log('ok', 'Счёт создан! Сумма к оплате: '+payAmount+' '+currency);
-  result.innerHTML = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px;text-align:left">
-    <div style="font-size:11px;color:var(--green);font-weight:600;margin-bottom:6px">✓ Счёт создан</div>
-    ${payAmount ? '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">К оплате: <span style="color:var(--text)">'+(payAmount+' '+currency)+'</span></div>' : ''}
-    ${address ? '<div style="font-size:10px;color:var(--text3);word-break:break-all;margin-bottom:6px">'+address+'</div>' : ''}
-    ${payUrl ? '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:7px;background:var(--accent);color:#000;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none">💳 Перейти к оплате</a>' : ''}
-  </div>`;
+  log('ok', 'Счёт создан!');
+  result.innerHTML = '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px;margin-top:4px">'
+    + '<div style="font-size:11px;color:var(--green);font-weight:600;margin-bottom:6px">✓ Счёт создан</div>'
+    + (payAmount ? '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">К оплате: <span style="color:var(--text)">'+payAmount+' '+currency+'</span></div>' : '')
+    + (address ? '<div style="font-size:10px;color:var(--text3);word-break:break-all;margin-bottom:6px;user-select:all">'+address+'</div>' : '')
+    + (payUrl ? '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:7px;background:var(--accent);color:#000;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none">💳 Перейти к оплате</a>' : '')
+    + '</div>';
 }
+
 
 // ══ UTILS ══
 function toggleEye(id,btn){ const i=document.getElementById(id); i.type=i.type==='password'?'text':'password'; btn.textContent=i.type==='password'?'👁':'🙈'; }
