@@ -1127,6 +1127,7 @@ async function lhGetBalance(){
   log('info','Запрос баланса LuxHost...');
   const data = await lhReq('GET', '/public/api/users/me');
   if(!data){ log('err','Нет ответа'); return; }
+  log('info', 'RAW баланс: ' + JSON.stringify(data).slice(0,300));
   const rawBal = data.balance !== undefined ? data.balance : (data.Balance !== undefined ? data.Balance : null);
   if(rawBal !== null){
     // API returns cents (295 = $2.95)
@@ -1208,6 +1209,9 @@ async function lhSearch(){
   const data = await lhReq('GET', '/public/api/domains/search?domain='+encodeURIComponent(q));
   if(!data){ res.innerHTML = ''; return; }
 
+  // RAW LOG - чтобы понять структуру ответа
+  log('info', 'RAW поиск: ' + JSON.stringify(data).slice(0, 500));
+
   // Handle different response formats
   let items = [];
   if(Array.isArray(data)) items = data;
@@ -1215,6 +1219,8 @@ async function lhSearch(){
   else if(data.results) items = data.results;
   else if(data.domain) items = [data];
   else items = [data];
+
+  log('info', 'Найдено вариантов: ' + items.length + ', первый: ' + JSON.stringify(items[0]).slice(0,200));
 
   // Deduplicate by domain name
   const seen = new Set();
