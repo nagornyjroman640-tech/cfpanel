@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CF Domain Manager</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:      #0b0b12;
+  --bg2:     #11111a;
+  --bg3:     #191924;
+  --bg4:     #222232;
+  --border:  #28283c;
+  --border2: #383850;
+  --accent:  #f6821f;
+  --accent2: #faad3f;
+  --blue:    #5ba4ff;
+  --green:   #3ecf8e;
+  --red:     #ff4f6a;
+  --yellow:  #ffd32a;
+  --text:    #eaeaf5;
+  --text2:   #8888a8;
+  --text3:   #50506a;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; overflow: hidden; }
+
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(rgba(91,164,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(91,164,255,.03) 1px,transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* ══ LOGIN SCREEN ══ */
+#login-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 380px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: slideUp .35s ease;
+}
+
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+
+.login-head {
+  padding: 28px 28px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+}
+
+.login-logo {
+  width: 42px; height: 42px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(246,130,31,.3);
+}
+
+.login-title { font-family: var(--sans); font-weight: 800; font-size: 18px; }
+.login-sub   { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.login-body { padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 14px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 11px; color: var(--text2); font-weight: 500; letter-spacing: .3px; }
+
+input[type=email], input[type=password], input[type=text], input[type=number], textarea, select {
+  width: 100%; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 10px 12px; outline: none; transition: border-color .15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; line-height: 1.65; }
+select option { background: var(--bg2); }
+
+.token-wrap { position: relative; }
+.token-wrap input { padding-right: 38px; }
+.eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text3); font-size: 14px; transition: color .15s; }
+.eye:hover { color: var(--text); }
+
+.btn {
+  padding: 9px 14px; border-radius: 7px; font-size: 12px; font-family: var(--mono);
+  cursor: pointer; border: 1px solid var(--border); background: var(--bg3); color: var(--text2);
+  transition: all .15s; display: inline-flex; align-items: center; gap: 7px;
+  white-space: nowrap; font-weight: 500;
+}
+.btn:hover { border-color: var(--border2); color: var(--text); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+.btn-primary:hover:not(:disabled) { background: var(--accent2); border-color: var(--accent2); }
+.btn-full { width: 100%; justify-content: center; padding: 11px; font-size: 13px; }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--bg3); border-color: var(--border); }
+.btn-danger { color: var(--red); border-color: rgba(255,79,106,.25); }
+.btn-danger:hover { background: rgba(255,79,106,.08); border-color: var(--red); }
+
+.login-err { font-size: 11px; color: var(--red); text-align: center; padding: 8px; background: rgba(255,79,106,.08); border: 1px solid rgba(255,79,106,.2); border-radius: 6px; display: none; }
+.login-err.show { display: block; }
+
+/* ══ APP SHELL ══ */
+#app { display: none; position: relative; z-index: 1; height: 100vh; flex-direction: row; }
+#app.visible { display: flex; }
+
+/* SIDEBAR */
+.sidebar {
+  width: 234px; min-width: 234px;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+
+.logo { padding: 18px 18px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 11px; }
+.logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg,var(--accent),var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; box-shadow: 0 0 14px rgba(246,130,31,.3); }
+.logo-text { font-family: var(--sans); font-weight: 800; font-size: 15px; }
+.logo-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+
+.user-bar {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 9px; font-size: 11px;
+}
+.user-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bg4); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.user-email { flex: 1; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout-btn { cursor: pointer; color: var(--text3); font-size: 13px; padding: 4px; border-radius: 4px; transition: all .15s; }
+.logout-btn:hover { color: var(--red); background: rgba(255,79,106,.1); }
+
+nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
+.nav-sec { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 2px; padding: 10px 10px 5px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 7px; cursor: pointer; font-size: 12px; color: var(--text2); transition: all .15s; border: 1px solid transparent; margin-bottom: 2px; user-select: none; }
+.nav-item:hover { background: var(--bg3); color: var(--text); }
+.nav-item.active { background: rgba(246,130,31,.13); color: var(--accent); border-color: rgba(246,130,31,.2); }
+.nav-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-badge { margin-left: auto; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 1px 7px; font-size: 10px; color: var(--text3); }
+.nav-item.active .nav-badge { background: rgba(246,130,31,.18); border-color: rgba(246,130,31,.28); color: var(--accent); }
+
+.api-box { margin: 8px; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; }
+.api-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text2); }
+.api-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; transition: background .3s; }
+.api-dot.ok  { background: var(--green); animation: blink 2.5s infinite; }
+.api-dot.err { background: var(--red); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+.api-sub { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+/* MAIN */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { height: 54px; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 22px; gap: 12px; flex-shrink: 0; }
+.pg-title { font-family: var(--sans); font-weight: 700; font-size: 15px; }
+.pg-sub { font-size: 11px; color: var(--text3); margin-left: 6px; }
+.tb-right { margin-left: auto; display: flex; gap: 8px; }
+
+.content { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+.tab-pane { display: none; flex-direction: column; gap: 16px; }
+.tab-pane.active { display: flex; }
+
+/* CARDS */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.card-head { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 9px; }
+.card-title { font-family: var(--sans); font-weight: 700; font-size: 13px; flex: 1; }
+.card-meta { font-size: 10px; color: var(--text3); }
+.card-body { padding: 16px; }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+.stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 13px 15px; }
+.stat-n { font-family: var(--sans); font-weight: 800; font-size: 26px; line-height: 1; }
+.stat-l { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 1.2px; margin-top: 5px; }
+
+/* DOMAIN LIST */
+.domain-list { display: flex; flex-direction: column; gap: 5px; max-height: 340px; overflow-y: auto; }
+.domain-row { display: flex; align-items: center; gap: 9px; padding: 8px 11px; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; animation: fadeIn .18s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:none} }
+.domain-name { flex: 1; color: var(--blue); font-weight: 500; }
+.domain-zone { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+.pill { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; flex-shrink: 0; }
+.pill-pending { background:rgba(255,211,42,.12); color:var(--yellow); border:1px solid rgba(255,211,42,.25); }
+.pill-running { background:rgba(91,164,255,.12); color:var(--blue); border:1px solid rgba(91,164,255,.25); }
+.pill-done    { background:rgba(62,207,142,.12); color:var(--green); border:1px solid rgba(62,207,142,.25); }
+.pill-error   { background:rgba(255,79,106,.12); color:var(--red); border:1px solid rgba(255,79,106,.25); }
+
+.del-btn { cursor:pointer; color:var(--text3); padding:2px 6px; border-radius:4px; transition:all .15s; font-size:13px; }
+.del-btn:hover { color:var(--red); background:rgba(255,79,106,.1); }
+
+.empty { text-align:center; padding:28px; color:var(--text3); font-size:11px; }
+.empty-icon { font-size:26px; margin-bottom:8px; }
+
+/* DNS TABLE */
+.dns-table { width:100%; border-collapse:collapse; }
+.dns-table th { text-align:left; padding:8px 11px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--text3); border-bottom:1px solid var(--border); font-weight:500; white-space:nowrap; }
+.dns-table td { padding:9px 11px; font-size:12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.dns-table tr:last-child td { border-bottom:none; }
+.dns-table tr:hover td { background:rgba(255,255,255,.015); }
+.type-tag { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:var(--bg4); border:1px solid var(--border2); color:var(--text2); }
+
+.proxy-toggle { display:flex; align-items:center; gap:7px; cursor:pointer; }
+.cloud { font-size:18px; opacity:.28; filter:grayscale(1); transition:all .2s; }
+.cloud.on { opacity:1; filter:none; }
+.proxy-lbl { font-size:10px; color:var(--text3); transition:color .2s; }
+.proxy-lbl.on { color:var(--accent); }
+
+.add-row { display:grid; gap:8px; align-items:end; grid-template-columns:90px 100px 1fr 70px auto auto; border-top:1px solid var(--border); padding-top:12px; margin-top:6px; }
+.add-row-lbl { font-size:10px; color:var(--text3); margin-bottom:3px; }
+
+/* PROGRESS */
+.prog-bar { height:3px; background:var(--bg4); border-radius:2px; overflow:hidden; margin-top:10px; }
+.prog-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:2px; transition:width .35s ease; width:0; }
+
+/* LOGS */
+.terminal { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; font-size:11px; line-height:1.9; max-height:300px; overflow-y:auto; font-family:var(--mono); }
+.log-line { display:flex; gap:12px; }
+.log-t { color:var(--text3); flex-shrink:0; width:62px; }
+.c-ok   { color:var(--green); }
+.c-err  { color:var(--red); }
+.c-info { color:var(--blue); }
+.c-warn { color:var(--yellow); }
+
+/* SETTINGS */
+.settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.field-hint { font-size:10px; color:var(--text3); margin-top:2px; }
+
+.info-box { display:flex; align-items:flex-start; gap:9px; padding:10px 12px; background:rgba(91,164,255,.07); border:1px solid rgba(91,164,255,.2); border-radius:7px; font-size:11px; color:var(--text2); }
+.tpl-btns { display:flex; flex-wrap:wrap; gap:8px; }
+
+/* SYNC indicator */
+.sync-badge { display:inline-flex; align-items:center; gap:5px; font-size:10px; color:var(--green); padding:3px 8px; background:rgba(62,207,142,.1); border:1px solid rgba(62,207,142,.2); border-radius:20px; }
+.sync-badge.saving { color:var(--yellow); background:rgba(255,211,42,.1); border-color:rgba(255,211,42,.2); }
+
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+/* FIREBASE CONFIG MODAL */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+.modal { width:520px; background:var(--bg2); border:1px solid var(--border); border-radius:14px; overflow:hidden; animation:slideUp .25s ease; }
+.modal-head { padding:18px 22px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.modal-title { font-family:var(--sans); font-weight:800; font-size:14px; flex:1; }
+.modal-body { padding:22px; display:flex; flex-direction:column; gap:14px; }
+.modal-footer { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
+
+.code-block { background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:12px; font-size:11px; color:var(--blue); line-height:1.8; font-family:var(--mono); }
+</style>
+</head>
+<body>
+
+<!-- ══ FIREBASE CONFIG MODAL ══ -->
+<div id="cfg-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <span style="font-size:18px">🔥</span>
+      <span class="modal-title">Настройка Firebase</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span>ℹ️</span>
+        <span>Вставьте конфиг из вашего Firebase проекта. Данные хранятся только в браузере и нигде не передаются.</span>
+      </div>
+      <div class="field">
+        <label class="field-label">API Key</label>
+        <input type="text" id="fb-apiKey" placeholder="AIzaSy...">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field">
+          <label class="field-label">Auth Domain</label>
+          <input type="text" id="fb-authDomain" placeholder="project.firebaseapp.com">
+        </div>
+        <div class="field">
+          <label class="field-label">Project ID</label>
+          <input type="text" id="fb-projectId" placeholder="my-project-id">
+        </div>
+        <div class="field">
+          <label class="field-label">Storage Bucket</label>
+          <input type="text" id="fb-storageBucket" placeholder="project.appspot.com">
+        </div>
+        <div class="field">
+          <label class="field-label">Messaging Sender ID</label>
+          <input type="text" id="fb-messagingSenderId" placeholder="123456789">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">App ID</label>
+        <input type="text" id="fb-appId" placeholder="1:123:web:abc...">
+      </div>
+      <div style="font-size:11px;color:var(--text3)">
+        Где взять: <strong style="color:var(--text2)">console.firebase.google.com</strong> → Проект → ⚙️ Настройки → Общие → Ваши приложения → SDK
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveFbConfig()">🔥 Подключить Firebase</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-head">
+      <div class="login-logo">☁</div>
+      <div>
+        <div class="login-title">CF Manager</div>
+        <div class="login-sub">Domain Automation · Firebase</div>
+      </div>
+    </div>
+    <div class="login-body">
+      <div class="field">
+        <label class="field-label">Email</label>
+        <input type="email" id="l-email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <div class="field">
+        <label class="field-label">Пароль</label>
+        <div class="token-wrap">
+          <input type="password" id="l-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
+          <span class="eye" onclick="toggleEye('l-pass',this)">👁</span>
+        </div>
+      </div>
+      <div class="login-err" id="l-err"></div>
+      <button class="btn btn-primary btn-full" id="l-btn" onclick="login()">Войти →</button>
+      <div style="text-align:center;font-size:11px;color:var(--text3)">
+        Нет аккаунта? <span style="color:var(--accent);cursor:pointer" onclick="showRegister()">Зарегистрироваться</span>
+      </div>
+      <div style="text-align:center">
+        <span style="font-size:10px;color:var(--text3);cursor:pointer" onclick="showFbConfig()">⚙️ Настроить Firebase</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ REGISTER MODAL ══ -->
+<div id="reg-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:380px">
+    <div class="modal-head"><span>👤</span><span class="modal-title">Регистрация</span><span class="del-btn" onclick="document.getElementById('reg-modal').style.display='none'">✕</span></div>
+    <div class="modal-body">
+      <div class="field"><label class="field-label">Email</label><input type="email" id="r-email" placeholder="your@email.com"></div>
+      <div class="field">
+        <label class="field-label">Пароль</label>
+        <div class="token-wrap"><input type="password" id="r-pass" placeholder="Минимум 6 символов"><span class="eye" onclick="toggleEye('r-pass',this)">👁</span></div>
+      </div>
+      <div class="login-err" id="r-err"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('reg-modal').style.display='none'">Отмена</button>
+      <button class="btn btn-primary" onclick="register()">Создать аккаунт</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">☁</div>
+      <div><div class="logo-text">CF Manager</div><div class="logo-sub">Firebase · Shared</div></div>
+    </div>
+    <div class="user-bar">
+      <div class="user-avatar">👤</div>
+      <div class="user-email" id="u-email">—</div>
+      <span class="logout-btn" title="Выйти" onclick="logout()">⏻</span>
+    </div>
+    <nav>
+      <div class="nav-sec">Управление</div>
+      <div class="nav-item active" onclick="go('domains')"><span class="nav-icon">🌐</span>Домены<span class="nav-badge" id="nb-d">0</span></div>
+      <div class="nav-item" onclick="go('dns')"><span class="nav-icon">📋</span>A-Записи<span class="nav-badge" id="nb-r">0</span></div>
+      <div class="nav-item" onclick="go('deploy')"><span class="nav-icon">🚀</span>Деплой<span class="nav-badge" id="nb-dp">—</span></div>
+      <div class="nav-sec">Система</div>
+      <div class="nav-item" onclick="go('logs')"><span class="nav-icon">📟</span>Логи<span class="nav-badge" id="nb-l">0</span></div>
+      <div class="nav-item" onclick="go('settings')"><span class="nav-icon">⚙️</span>Настройки</div>
+    </nav>
+    <div class="api-box">
+      <div class="api-row"><div class="api-dot" id="api-dot"></div>Cloudflare API</div>
+      <div class="api-sub" id="api-sub">не настроен</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><span class="pg-title" id="pg-title">Домены</span><span class="pg-sub" id="pg-sub">Общие данные · Firebase</span></div>
+      <div class="tb-right" id="tb-right">
+        <span id="sync-indicator"></span>
+        <button class="btn btn-ghost btn-danger" onclick="clearAll()">🗑 Очистить</button>
+        <button class="btn btn-primary" onclick="go('deploy')">🚀 Задеплоить →</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- DOMAINS -->
+      <div class="tab-pane active" id="tab-domains">
+        <div class="stats">
+          <div class="stat"><div class="stat-n" id="s-t">0</div><div class="stat-l">Всего</div></div>
+          <div class="stat"><div class="stat-n" id="s-d" style="color:var(--green)">0</div><div class="stat-l">Готово</div></div>
+          <div class="stat"><div class="stat-n" id="s-e" style="color:var(--red)">0</div><div class="stat-l">Ошибок</div></div>
+          <div class="stat"><div class="stat-n" id="s-p" style="color:var(--yellow)">0</div><div class="stat-l">Ожидают</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>✏️</span><span class="card-title">Добавить домены</span><span class="card-meta">один домен на строку</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <textarea id="d-input" rows="5" placeholder="example.com&#10;mysite.org&#10;another-domain.net"></textarea>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:11px;color:var(--text3)">Дубликаты игнорируются · синхронизируется с Firebase</span>
+              <button class="btn btn-primary" style="margin-left:auto" onclick="parseDomains()">+ Добавить</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>🌐</span><span class="card-title">Список доменов</span><span class="card-meta" id="d-cnt">0 доменов</span></div>
+          <div class="card-body" style="padding:10px 12px">
+            <div class="domain-list" id="d-list"><div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DNS -->
+      <div class="tab-pane" id="tab-dns">
+        <div class="info-box"><span>ℹ️</span><span>Все записи применяются к <strong>каждому</strong> домену. Шаблон общий для всей команды.</span></div>
+        <div class="card">
+          <div class="card-head"><span>⚡</span><span class="card-title">Быстрые шаблоны</span></div>
+          <div class="card-body"><div class="tpl-btns">
+            <button class="btn" onclick="applyTpl('basic')">🌐 Сайт (@ + www)</button>
+            <button class="btn" onclick="applyTpl('mail')">📧 Почта (@ + www + mail)</button>
+            <button class="btn" onclick="applyTpl('full')">⚡ Полный (@ + www + mail + ftp)</button>
+            <button class="btn btn-danger" onclick="clearRecs()">🗑 Очистить</button>
+          </div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>📋</span><span class="card-title">Таблица A-записей</span><span class="card-meta" id="r-cnt">0 записей</span></div>
+          <div class="card-body" style="padding:0 0 14px">
+            <table class="dns-table">
+              <thead><tr><th style="padding-left:16px">Тип</th><th>Имя</th><th>IP / значение</th><th>TTL</th><th>☁ Proxy</th><th style="width:36px"></th></tr></thead>
+              <tbody id="r-tbody"></tbody>
+            </table>
+            <div style="padding:0 14px">
+              <div class="add-row">
+                <div class="field"><div class="add-row-lbl">Тип</div><select id="n-type"><option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option><option>TXT</option></select></div>
+                <div class="field"><div class="add-row-lbl">Имя</div><input type="text" id="n-name" value="@" placeholder="@ или www"></div>
+                <div class="field"><div class="add-row-lbl">IP / значение</div><input type="text" id="n-val" placeholder="1.2.3.4"></div>
+                <div class="field"><div class="add-row-lbl">TTL</div><input type="number" id="n-ttl" value="1" min="1"></div>
+                <div class="field" style="justify-content:flex-end;padding-bottom:1px">
+                  <div class="add-row-lbl">Proxy</div>
+                  <div class="proxy-toggle" onclick="toggleNP()"><span class="cloud on" id="nc">☁️</span><span class="proxy-lbl on" id="nl">вкл</span></div>
+                </div>
+                <div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-row-lbl">&nbsp;</div><button class="btn btn-primary" onclick="addRec()">+ Добавить</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEPLOY -->
+      <div class="tab-pane" id="tab-deploy">
+        <div class="card">
+          <div class="card-head"><span>🚀</span><span class="card-title">Деплой в Cloudflare</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="field"><label class="field-label">Режим</label>
+                <select id="dp-mode">
+                  <option value="zone_dns">Создать зону + DNS</option>
+                  <option value="dns_only">Только DNS</option>
+                  <option value="zone_only">Только зоны</option>
+                </select>
+              </div>
+              <div class="field"><label class="field-label">Пауза (мс)</label><input type="number" id="dp-delay" value="600" min="100"></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
+              <div>
+                <div id="dp-sum" style="font-size:13px;font-weight:600">Нет данных</div>
+                <div id="dp-det" style="font-size:11px;color:var(--text3);margin-top:3px">Добавьте домены и DNS записи</div>
+              </div>
+              <button class="btn btn-primary" id="dp-btn" onclick="startDeploy()">🚀 Запустить</button>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px"><span>Прогресс</span><span id="dp-prog">0 / 0</span></div>
+              <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+            </div>
+            <div class="domain-list" id="dp-list"><div class="empty"><div class="empty-icon">🚀</div>Нажмите «Запустить»</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOGS -->
+      <div class="tab-pane" id="tab-logs">
+        <div class="card">
+          <div class="card-head"><span>📟</span><span class="card-title">Лог операций</span><span class="card-meta" id="l-meta">0 записей</span></div>
+          <div class="card-body" style="padding:0"><div class="terminal" id="terminal"><div class="log-line"><span class="log-t">--:--:--</span><span class="c-info">ℹ Готов.</span></div></div></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="clearLogs()">🗑 Очистить</button>
+          <button class="btn" onclick="exportLogs()">💾 Экспорт .txt</button>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="tab-pane" id="tab-settings">
+        <div class="card">
+          <div class="card-head"><span>🔑</span><span class="card-title">Cloudflare API</span><span class="card-meta">сохраняется в Firestore</span></div>
+          <div class="card-body">
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">API Token</label>
+                <div class="token-wrap"><input type="password" id="cf-tok" placeholder="Bearer CF API Token"><span class="eye" onclick="toggleEye('cf-tok',this)">👁</span></div>
+                <div class="field-hint">CF → My Profile → API Tokens</div>
+              </div>
+              <div class="field">
+                <label class="field-label">Account ID</label>
+                <input type="text" id="cf-acc" placeholder="32-символьный ID">
+                <div class="field-hint">CF → любой сайт → Overview</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-primary" onclick="saveCfSettings()">💾 Сохранить в Firebase</button>
+              <button class="btn" onclick="testAPI()">🔌 Проверить</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>🔥</span><span class="card-title">Firebase</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--text2)">Project ID: <span id="fb-project-id" style="color:var(--blue)">—</span></div>
+            <div style="font-size:12px;color:var(--text2)">Статус: <span id="fb-status" style="color:var(--green)">подключён</span></div>
+            <button class="btn" style="align-self:flex-start" onclick="showFbConfig()">⚙️ Изменить конфиг Firebase</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>⚙️</span><span class="card-title">Деплой</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px"><input type="checkbox" id="opt-skip" checked style="width:auto;accent-color:var(--accent)"><span>Не падать если зона уже существует</span></label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px"><input type="checkbox" id="opt-stop" style="width:auto;accent-color:var(--accent)"><span>Остановить деплой при первой ошибке</span></label>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// ══ STATE ══
+let db, auth, user;
+let domains = [], records = [], cfSettings = {}, logs = [], running = false, newProxy = true;
+let unsubDomains, unsubRecords, unsubSettings;
+
+const PAGES = {
+  domains: { title:'Домены', sub:'Общие данные · Firebase Firestore' },
+  dns:     { title:'A-Записи', sub:'DNS шаблон общий для всей команды' },
+  deploy:  { title:'Деплой', sub:'Создание зон и применение DNS записей' },
+  logs:    { title:'Логи', sub:'История операций' },
+  settings:{ title:'Настройки', sub:'CF API и конфигурация' }
+};
+
+// ══ FIREBASE INIT ══
+function initFirebase(cfg) {
+  try {
+    if (firebase.apps.length) firebase.app().delete();
+    firebase.initializeApp(cfg);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+
+    auth.onAuthStateChanged(u => {
+      if (u) { user = u; showApp(); }
+      else   { user = null; showLogin(); }
+    });
+    return true;
+  } catch(e) { showErr('l-err', 'Ошибка Firebase: ' + e.message); return false; }
+}
+
+// Load saved config
+(function boot() {
+  const saved = localStorage.getItem('fb_cfg');
+  if (saved) {
+    try { initFirebase(JSON.parse(saved)); }
+    catch(e) { showFbConfig(); }
+  } else {
+    showFbConfig();
+  }
+})();
+
+function showFbConfig() {
+  const saved = localStorage.getItem('fb_cfg');
+  if (saved) {
+    const c = JSON.parse(saved);
+    ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k => {
+      const el = document.getElementById('fb-'+k);
+      if (el) el.value = c[k] || '';
+    });
+  }
+  document.getElementById('cfg-modal').style.display = 'flex';
+}
+
+function saveFbConfig() {
+  const cfg = {
+    apiKey:            document.getElementById('fb-apiKey').value.trim(),
+    authDomain:        document.getElementById('fb-authDomain').value.trim(),
+    projectId:         document.getElementById('fb-projectId').value.trim(),
+    storageBucket:     document.getElementById('fb-storageBucket').value.trim(),
+    messagingSenderId: document.getElementById('fb-messagingSenderId').value.trim(),
+    appId:             document.getElementById('fb-appId').value.trim()
+  };
+  if (!cfg.apiKey || !cfg.projectId) { alert('Заполните минимум API Key и Project ID'); return; }
+  localStorage.setItem('fb_cfg', JSON.stringify(cfg));
+  document.getElementById('cfg-modal').style.display = 'none';
+  if (initFirebase(cfg)) log('ok', 'Firebase инициализирован: ' + cfg.projectId);
+}
+
+// ══ AUTH ══
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('u-email').textContent = user.email;
+  document.getElementById('fb-project-id').textContent = firebase.app().options.projectId || '—';
+  subscribeAll();
+  loadCfSettings();
+  log('ok', `Вошёл: ${user.email}`);
+}
+
+async function login() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  if (!email || !pass) { showErr('l-err', 'Введите email и пароль'); return; }
+  const btn = document.getElementById('l-btn');
+  btn.textContent = '⏳ Вход…'; btn.disabled = true;
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e) {
+    showErr('l-err', friendlyErr(e.code));
+    btn.textContent = 'Войти →'; btn.disabled = false;
+  }
+}
+
+function showRegister() { document.getElementById('reg-modal').style.display = 'flex'; }
+
+async function register() {
+  const email = document.getElementById('r-email').value.trim();
+  const pass  = document.getElementById('r-pass').value;
+  if (!email || !pass) { showErr('r-err', 'Заполните все поля'); return; }
+  try {
+    await auth.createUserWithEmailAndPassword(email, pass);
+    document.getElementById('reg-modal').style.display = 'none';
+  } catch(e) { showErr('r-err', friendlyErr(e.code)); }
+}
+
+function logout() {
+  if (unsubDomains) unsubDomains();
+  if (unsubRecords) unsubRecords();
+  if (unsubSettings) unsubSettings();
+  auth.signOut();
+}
+
+function friendlyErr(code) {
+  const map = {
+    'auth/user-not-found':    'Пользователь не найден',
+    'auth/wrong-password':    'Неверный пароль',
+    'auth/invalid-email':     'Некорректный email',
+    'auth/email-already-in-use': 'Email уже используется',
+    'auth/weak-password':     'Пароль слишком короткий (минимум 6)',
+    'auth/invalid-credential':'Неверный email или пароль'
+  };
+  return map[code] || 'Ошибка: ' + code;
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ══ FIRESTORE SUBSCRIPTIONS (realtime) ══
+function subscribeAll() {
+  // Domains
+  unsubDomains = db.collection('domains').orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      domains = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderDomains(); updateDeployInfo();
+    });
+
+  // Records
+  unsubRecords = db.collection('records').orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderRecs(); updateDeployInfo();
+    });
+}
+
+async function loadCfSettings() {
+  unsubSettings = db.collection('settings').doc('cloudflare')
+    .onSnapshot(doc => {
+      if (doc.exists) {
+        cfSettings = doc.data();
+        document.getElementById('cf-tok').value = cfSettings.token || '';
+        document.getElementById('cf-acc').value = cfSettings.account || '';
+        setDot(!!cfSettings.token);
+      }
+    });
+}
+
+function syncIndicator(saving) {
+  const el = document.getElementById('sync-indicator');
+  el.innerHTML = saving
+    ? `<span class="sync-badge saving">⟳ Сохраняю…</span>`
+    : `<span class="sync-badge">✓ Синхронизировано</span>`;
+  if (!saving) setTimeout(() => el.innerHTML = '', 2000);
+}
+
+// ══ DOMAINS ══
+async function parseDomains() {
+  const lines = document.getElementById('d-input').value
+    .split('\n').map(l => l.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/$/,''))
+    .filter(l => l && l.includes('.') && !l.includes(' '));
+
+  const existing = new Set(domains.map(d => d.name));
+  let added = 0;
+  syncIndicator(true);
+  for (const name of lines) {
+    if (!existing.has(name)) {
+      await db.collection('domains').add({ name, status: 'pending', zoneId: null, err: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: user.email });
+      added++;
+    }
+  }
+  document.getElementById('d-input').value = '';
+  syncIndicator(false);
+  log('ok', `Добавлено ${added} доменов (дублей: ${lines.length - added})`);
+}
+
+async function removeDomain(id, name) {
+  await db.collection('domains').doc(id).delete();
+  log('warn', `Удалён: ${name}`);
+}
+
+async function clearAll() {
+  if (!confirm('Очистить весь список доменов в Firebase?')) return;
+  syncIndicator(true);
+  const snap = await db.collection('domains').get();
+  const batch = db.batch();
+  snap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+  syncIndicator(false);
+  log('warn', 'Все домены удалены');
+}
+
+function renderDomains() {
+  const list = document.getElementById('d-list');
+  let cnt = { t:domains.length, d:0, e:0, p:0 };
+  domains.forEach(d => {
+    if (d.status==='done') cnt.d++;
+    else if (d.status==='error') cnt.e++;
+    else cnt.p++;
+  });
+  if (!domains.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🌍</div>Нет загруженных доменов</div>`;
+  } else {
+    list.innerHTML = domains.map(d => {
+      const cls = {pending:'pill-pending',running:'pill-running',done:'pill-done',error:'pill-error'}[d.status]||'pill-pending';
+      const lbl = {pending:'ожидает',running:'⟳ обработка',done:'✓ готово',error:'✗ ошибка'}[d.status]||'ожидает';
+      return `<div class="domain-row">
+        <span class="domain-name">${d.name}</span>
+        ${d.addedBy && d.addedBy !== user?.email ? `<span style="font-size:10px;color:var(--text3)">${d.addedBy}</span>` : ''}
+        ${d.zoneId  ? `<span class="domain-zone">${d.zoneId.slice(0,10)}…</span>` : ''}
+        ${d.err     ? `<span style="font-size:10px;color:var(--red);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.err}</span>` : ''}
+        <span class="pill ${cls}">${lbl}</span>
+        <span class="del-btn" onclick="removeDomain('${d.id}','${d.name}')">✕</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('d-cnt').textContent = `${domains.length} доменов`;
+  document.getElementById('nb-d').textContent = domains.length;
+  ['t','d','e','p'].forEach(k => document.getElementById('s-'+k).textContent = cnt[k]);
+}
+
+// ══ DNS RECORDS ══
+function toggleNP() {
+  newProxy = !newProxy;
+  document.getElementById('nc').classList.toggle('on', newProxy);
+  const nl = document.getElementById('nl');
+  nl.classList.toggle('on', newProxy);
+  nl.textContent = newProxy ? 'вкл' : 'выкл';
+}
+
+async function addRec() {
+  const type  = document.getElementById('n-type').value;
+  const name  = document.getElementById('n-name').value.trim() || '@';
+  const value = document.getElementById('n-val').value.trim();
+  const ttl   = parseInt(document.getElementById('n-ttl').value) || 1;
+  if (!value) { alert('Укажи IP или значение'); return; }
+  syncIndicator(true);
+  await db.collection('records').add({ type, name, value, ttl, proxied: newProxy, createdAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: user.email });
+  document.getElementById('n-val').value = '';
+  syncIndicator(false);
+  log('ok', `DNS: ${type} ${name} → ${value} proxy:${newProxy}`);
+}
+
+async function removeRec(id, name) {
+  await db.collection('records').doc(id).delete();
+  log('warn', `Удалена запись: ${name}`);
+}
+
+async function toggleProxy(id, current) {
+  await db.collection('records').doc(id).update({ proxied: !current });
+}
+
+function renderRecs() {
+  const tb = document.getElementById('r-tbody');
+  if (!records.length) {
+    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--text3);font-size:11px">Нет записей. Добавьте ниже или выберите шаблон.</td></tr>`;
+  } else {
+    tb.innerHTML = records.map(r => `<tr>
+      <td style="padding-left:16px"><span class="type-tag">${r.type}</span></td>
+      <td style="color:var(--blue);font-weight:500">${r.name}</td>
+      <td style="color:var(--text2)">${r.value}</td>
+      <td style="color:var(--text3)">${r.ttl===1?'Авто':r.ttl}</td>
+      <td><div class="proxy-toggle" onclick="toggleProxy('${r.id}',${r.proxied})">
+        <span class="cloud ${r.proxied?'on':''}">☁️</span>
+        <span style="font-size:10px;color:${r.proxied?'var(--accent)':'var(--text3)'}">${r.proxied?'вкл':'выкл'}</span>
+      </div></td>
+      <td><span class="del-btn" onclick="removeRec('${r.id}','${r.name}')">✕</span></td>
+    </tr>`).join('');
+  }
+  document.getElementById('r-cnt').textContent = `${records.length} записей`;
+  document.getElementById('nb-r').textContent = records.length;
+}
+
+async function clearRecs() {
+  if (!records.length) return;
+  if (!confirm('Удалить все DNS записи?')) return;
+  const batch = db.batch();
+  const snap = await db.collection('records').get();
+  snap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+  log('warn', 'DNS шаблон очищен');
+}
+
+async function applyTpl(name) {
+  const IP = '1.2.3.4';
+  const T = {
+    basic: [{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true}],
+    mail:  [{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false},{type:'MX',name:'@',value:'mail.DOMAIN',ttl:3600,proxied:false}],
+    full:  [{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false},{type:'A',name:'ftp',value:IP,ttl:1,proxied:false}]
+  };
+  const existing = new Set(records.map(r => r.type+'|'+r.name));
+  let added = 0;
+  syncIndicator(true);
+  for (const r of T[name]) {
+    if (!existing.has(r.type+'|'+r.name)) {
+      await db.collection('records').add({ ...r, createdAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: user.email });
+      added++;
+    }
+  }
+  syncIndicator(false);
+  log('ok', `Шаблон «${name}»: +${added} записей. Замените IP на реальный.`);
+}
+
+// ══ DEPLOY ══
+function updateDeployInfo() {
+  const pend = domains.filter(d => d.status !== 'done');
+  const r = records.length;
+  if (pend.length && r) {
+    document.getElementById('dp-sum').textContent = `${pend.length} доменов · ${r} записей`;
+    document.getElementById('dp-det').textContent = `Создать ${pend.length} зон и применить ${r} записей к каждой`;
+  } else if (!pend.length) {
+    document.getElementById('dp-sum').textContent = domains.length ? 'Все домены задеплоены' : 'Нет доменов';
+    document.getElementById('dp-det').textContent = 'Добавьте домены';
+  } else {
+    document.getElementById('dp-sum').textContent = 'Нет DNS записей';
+    document.getElementById('dp-det').textContent = 'Добавьте записи во вкладке A-Записи';
+  }
+  document.getElementById('nb-dp').textContent = pend.length || '—';
+}
+
+async function startDeploy() {
+  if (running) return;
+  const token   = document.getElementById('cf-tok').value.trim();
+  const account = document.getElementById('cf-acc').value.trim();
+  if (!token || !account) { alert('Настройте API Token и Account ID'); go('settings'); return; }
+  const mode = document.getElementById('dp-mode').value;
+  if (mode !== 'zone_only' && !records.length) { alert('Добавьте DNS записи'); go('dns'); return; }
+  const pend = domains.filter(d => d.status !== 'done');
+  if (!pend.length) { alert('Нет доменов для деплоя'); return; }
+
+  running = true;
+  const btn = document.getElementById('dp-btn');
+  btn.textContent = '⏳ Работаю…'; btn.disabled = true;
+  document.getElementById('prog-fill').style.width = '0%';
+
+  const delay = parseInt(document.getElementById('dp-delay').value) || 600;
+  const skipDup = document.getElementById('opt-skip').checked;
+  const stopErr = document.getElementById('opt-stop').checked;
+  let done = 0, errs = 0;
+
+  log('info', `▶ Деплой: ${pend.length} доменов, режим: ${mode}`);
+
+  for (let i = 0; i < pend.length; i++) {
+    const d = pend[i];
+    await db.collection('domains').doc(d.id).update({ status: 'running', err: null });
+    renderDeployList(pend, i);
+
+    try {
+      let zoneId = null;
+
+      if (mode !== 'dns_only') {
+        const res = await cfReq(token, 'POST', '/zones', { name: d.name, account: { id: account }, jump_start: false });
+        if (res.success) {
+          zoneId = res.result.id;
+          log('ok', `[${d.name}] Зона создана: ${zoneId}`);
+        } else {
+          const msg = res.errors?.[0]?.message || '?';
+          if (msg.toLowerCase().includes('already exist') && skipDup) {
+            log('warn', `[${d.name}] Зона уже есть, ищем…`);
+            const lr = await cfReq(token, 'GET', `/zones?name=${d.name}`);
+            if (lr.success && lr.result?.[0]) { zoneId = lr.result[0].id; log('ok', `[${d.name}] ID: ${zoneId}`); }
+            else throw new Error('Зона есть, ID не найден');
+          } else throw new Error(msg);
+        }
+      } else {
+        const lr = await cfReq(token, 'GET', `/zones?name=${d.name}`);
+        if (lr.success && lr.result?.[0]) zoneId = lr.result[0].id;
+        else throw new Error('Зона не найдена');
+      }
+
+      if (mode !== 'zone_only' && zoneId) {
+        for (const rec of records) {
+          const rr = await cfReq(token, 'POST', `/zones/${zoneId}/dns_records`, { type:rec.type, name:rec.name, content:rec.value, ttl:rec.ttl, proxied:rec.proxied });
+          if (rr.success) log('ok', `[${d.name}] ${rec.type} ${rec.name}→${rec.value} ${rec.proxied?'🟠':'⚪'}`);
+          else log('warn', `[${d.name}] ${rec.type}: ${rr.errors?.[0]?.message}`);
+        }
+      }
+
+      await db.collection('domains').doc(d.id).update({ status: 'done', zoneId: zoneId || null });
+      done++;
+    } catch(e) {
+      await db.collection('domains').doc(d.id).update({ status: 'error', err: e.message });
+      errs++;
+      log('err', `[${d.name}] ✗ ${e.message}`);
+      if (stopErr) { log('warn', 'Остановка по ошибке'); break; }
+    }
+
+    const pct = Math.round(((i+1) / pend.length) * 100);
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('dp-prog').textContent = `${i+1} / ${pend.length}`;
+    renderDeployList(pend, i);
+    if (i < pend.length - 1) await sleep(delay);
+  }
+
+  running = false;
+  btn.textContent = '🚀 Запустить'; btn.disabled = false;
+  log('info', `■ Завершён — успешно: ${done}, ошибок: ${errs}`);
+  updateDeployInfo();
+}
+
+function renderDeployList(list, cur) {
+  document.getElementById('dp-list').innerHTML = list.map((d, i) => {
+    const cls = {pending:'pill-pending',running:'pill-running',done:'pill-done',error:'pill-error'}[d.status]||'pill-pending';
+    const lbl = {pending:'ожидает',running:'⟳ обработка…',done:'✓ готово',error:'✗ ошибка'}[d.status]||'—';
+    return `<div class="domain-row" style="${i===cur&&d.status==='running'?'border-color:var(--accent)':''}">
+      <span class="domain-name">${d.name}</span>
+      ${d.err ? `<span style="font-size:10px;color:var(--red)">${d.err}</span>` : ''}
+      <span class="pill ${cls}">${lbl}</span>
+    </div>`;
+  }).join('');
+}
+
+async function cfReq(token, method, path, body) {
+  const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  return (await fetch('https://api.cloudflare.com/client/v4' + path, opts)).json();
+}
+
+// ══ CF SETTINGS ══
+async function saveCfSettings() {
+  const token   = document.getElementById('cf-tok').value.trim();
+  const account = document.getElementById('cf-acc').value.trim();
+  await db.collection('settings').doc('cloudflare').set({ token, account, updatedBy: user.email, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  setDot(!!token);
+  log('ok', 'CF настройки сохранены в Firebase');
+  alert('✅ Сохранено в Firebase!');
+}
+
+async function testAPI() {
+  const token = document.getElementById('cf-tok').value.trim();
+  if (!token) { alert('Введите API Token'); return; }
+  log('info', 'Проверка CF API…');
+  try {
+    const res = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { 'Authorization': `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success) { setDot(true, data.result?.status); log('ok', `Token: ${data.result?.status}`); alert('✅ OK!'); }
+    else { setDot(false); log('err', data.errors?.[0]?.message); alert('❌ ' + data.errors?.[0]?.message); }
+  } catch(e) { log('err', e.message); alert('❌ ' + e.message); }
+}
+
+function setDot(ok, sub) {
+  document.getElementById('api-dot').className = 'api-dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('api-sub').textContent = ok ? (sub || 'настроен') : 'не настроен';
+}
+
+// ══ NAV ══
+function go(page) {
+  document.querySelectorAll('.tab-pane').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', (n.getAttribute('onclick')||'').includes("'"+page+"'")));
+  document.getElementById('pg-title').textContent = PAGES[page].title;
+  document.getElementById('pg-sub').textContent   = PAGES[page].sub;
+  const tbr = document.getElementById('tb-right');
+  const sync = `<span id="sync-indicator"></span>`;
+  if (page === 'domains') tbr.innerHTML = `${sync}<button class="btn btn-ghost btn-danger" onclick="clearAll()">🗑 Очистить</button><button class="btn btn-primary" onclick="go('deploy')">🚀 Задеплоить →</button>`;
+  else if (page === 'dns') tbr.innerHTML = `${sync}<button class="btn btn-ghost btn-danger" onclick="clearRecs()">🗑 Очистить DNS</button>`;
+  else if (page === 'logs') tbr.innerHTML = `<button class="btn" onclick="exportLogs()">💾 Экспорт</button><button class="btn btn-ghost btn-danger" onclick="clearLogs()">🗑 Очистить</button>`;
+  else tbr.innerHTML = sync;
+  if (page === 'deploy') updateDeployInfo();
+}
+
+// ══ LOGS ══
+function log(type, msg) {
+  const t = new Date().toTimeString().slice(0,8);
+  const cls = {ok:'c-ok',err:'c-err',info:'c-info',warn:'c-warn'}[type]||'c-info';
+  const pfx = {ok:'✓',err:'✗',info:'ℹ',warn:'⚠'}[type];
+  const term = document.getElementById('terminal');
+  term.insertAdjacentHTML('beforeend', `<div class="log-line"><span class="log-t">${t}</span><span class="${cls}">${pfx} ${msg}</span></div>`);
+  term.scrollTop = term.scrollHeight;
+  logs.push({ t, type, msg });
+  document.getElementById('nb-l').textContent  = logs.length;
+  document.getElementById('l-meta').textContent = `${logs.length} записей`;
+}
+
+function clearLogs() { logs=[]; document.getElementById('terminal').innerHTML=''; document.getElementById('nb-l').textContent='0'; document.getElementById('l-meta').textContent='0 записей'; }
+
+function exportLogs() {
+  const txt = logs.map(l => `[${l.t}] [${l.type.toUpperCase()}] ${l.msg}`).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(txt);
+  a.download = `cf-logs-${Date.now()}.txt`; a.click();
+}
+
+// ══ UTILS ══
+function toggleEye(id, btn) { const inp = document.getElementById(id); inp.type = inp.type==='password'?'text':'password'; btn.textContent = inp.type==='password'?'👁':'🙈'; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
