@@ -1082,14 +1082,17 @@ async function lhReq(method, path, body){
 async function lhGetBalance(){
   log('info','Запрос баланса LuxHost...');
   const data = await lhReq('GET', '/public/api/users/me');
-  if(data && data.balance !== undefined){
-    // LuxHost returns balance in cents, divide by 100
-    const bal = parseFloat(data.balance);
-    const balDisplay = bal > 100 ? (bal/100).toFixed(2) : bal.toFixed(2);
+  if(!data){ log('err','Нет ответа от LuxHost'); return; }
+  const rawBal = data.balance ?? data.Balance ?? data.account_balance ?? null;
+  if(rawBal !== null){
+    // API returns cents (295 = $2.95)
+    const balDisplay = (parseFloat(rawBal) / 100).toFixed(2);
     document.getElementById('lh-balance').textContent = '$' + balDisplay;
     document.getElementById('nb-lh').textContent = '$' + balDisplay;
     log('ok', 'Баланс: $' + balDisplay);
-  } else { log('err','Не удалось получить баланс'); }
+  } else {
+    log('warn', 'balance не найден. Поля: ' + Object.keys(data).join(', '));
+  }
 }
 
 async function lhSearch(){
@@ -1107,7 +1110,7 @@ async function lhSearch(){
     const avail = d.available !== false;
     const name = d.domain || d.name || q;
     const rawPrice = d.price || d.cost || d.register_price || 0;
-    const price = rawPrice ? (rawPrice > 100 ? (rawPrice/100) : rawPrice).toFixed(2) : null;
+    const price = rawPrice ? (parseFloat(rawPrice) / 100).toFixed(2) : null;
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">';
     html += '<span style="flex:1;color:var(--blue);font-weight:500">' + name + '</span>';
     if(price) html += '<span style="color:var(--accent);font-weight:600">$' + price + '</span>';
