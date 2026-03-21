@@ -295,6 +295,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
       <div class="nav-item active" onclick="go('domains')"><span class="nav-icon">🌐</span>Домены<span class="nav-badge" id="nb-d">0</span></div>
       <div class="nav-item" onclick="go('template')"><span class="nav-icon">📋</span>Шаблон DNS<span class="nav-badge" id="nb-t">0</span></div>
       <div class="nav-item" onclick="go('deploy')"><span class="nav-icon">🚀</span>Деплой<span class="nav-badge" id="nb-dp">—</span></div>
+      <div class="nav-sec">Регистратор</div>
+      <div class="nav-item" onclick="go('luxhost')"><span class="nav-icon">🛒</span>LuxHost<span class="nav-badge" id="nb-lh">—</span></div>
       <div class="nav-sec">Система</div>
       <div class="nav-item" onclick="go('logs')"><span class="nav-icon">📟</span>Логи<span class="nav-badge" id="nb-l">0</span></div>
       <div class="nav-item" onclick="go('settings')"><span class="nav-icon">⚙️</span>Настройки</div>
@@ -440,6 +442,16 @@ nav{flex:1;padding:8px;overflow-y:auto}
           </div>
         </div>
         <div class="card">
+          <div class="card-head"><span>🛒</span><span class="card-title">LuxHost API</span></div>
+          <div class="card-body">
+            <div class="field"><label class="field-label">API Token</label><div class="tok-wrap"><input type="password" id="lh-token" placeholder="LuxHost API Token"><span class="eye" onclick="toggleEye('lh-token',this)">👁</span></div><div class="field-hint">LuxHost → Личный кабинет → API</div></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-primary" onclick="saveLhToken()">💾 Сохранить</button>
+              <button class="btn" onclick="lhGetBalance()">🔌 Проверить</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-head"><span>🔥</span><span class="card-title">Firebase</span></div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
             <div style="font-size:12px;color:var(--text2)">Project: <span id="fb-pid" style="color:var(--blue)">—</span></div>
@@ -456,6 +468,66 @@ nav{flex:1;padding:8px;overflow-y:auto}
         </div>
       </div>
 
+      <!-- LUXHOST TAB -->
+      <div class="tab-pane" id="tab-luxhost">
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:14px">
+          <div class="card">
+            <div class="card-head"><span>💰</span><span class="card-title">Баланс</span></div>
+            <div class="card-body" style="text-align:center;padding:16px">
+              <div id="lh-balance" style="font-family:var(--sans);font-weight:800;font-size:32px;color:var(--green)">—</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:4px">USD</div>
+              <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="lhGetBalance()">🔄 Обновить</button>
+              <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:8px;text-align:left">Пополнить баланс</div>
+                <div style="display:flex;gap:6px;margin-bottom:8px">
+                  <input type="number" id="lh-topup-amount" placeholder="Сумма $" min="1" style="flex:1;padding:6px 8px;font-size:12px">
+                </div>
+                <select id="lh-topup-currency" style="width:100%;margin-bottom:8px;padding:6px 8px;font-size:12px">
+                  <option value="USDT_TRC20">USDT TRC20</option>
+                  <option value="USDT_ERC20">USDT ERC20</option>
+                  <option value="BTC">Bitcoin</option>
+                  <option value="ETH">Ethereum</option>
+                  <option value="LTC">Litecoin</option>
+                </select>
+                <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="lhCreateInvoice()">💳 Создать счёт</button>
+              </div>
+              <div id="lh-invoice-result" style="margin-top:10px"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>🔍</span><span class="card-title">Проверить домен</span></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:8px">
+                <input type="text" id="lh-search-input" placeholder="example.com" style="flex:1" onkeydown="if(event.key==='Enter')lhSearch()">
+                <button class="btn btn-primary" onclick="lhSearch()">🔍 Проверить</button>
+              </div>
+              <div id="lh-search-results"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>📋</span><span class="card-title">Массовая проверка</span><span class="card-meta">один домен на строку</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <textarea id="lh-bulk-input" rows="4" placeholder="example.com&#10;mysite.org&#10;another.net"></textarea>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-primary" onclick="lhBulkSearch()">🔍 Проверить все</button>
+              <button class="btn" onclick="lhBuySelected()">🛒 Купить выбранные</button>
+              <span style="font-size:11px;color:var(--text3)" id="lh-bulk-stat"></span>
+            </div>
+            <div id="lh-bulk-results" class="d-list"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>🌐</span><span class="card-title">Мои домены в LuxHost</span><span class="card-meta" id="lh-domains-cnt">—</span>
+            <button class="btn btn-sm" style="margin-left:8px" onclick="lhGetDomains()">🔄 Обновить</button>
+          </div>
+          <div class="card-body" style="padding:10px 12px">
+            <div class="d-list" id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
+          </div>
+        </div>
+      </div>
+
+
     </div>
   </main>
 </div>
@@ -468,10 +540,14 @@ let newTplProxy=true, bulkProxy=true, bulkRecs=[];
 let unsub={};
 let expandedDomains=new Set(), selectedDomains=new Set();
 
+let lhDomains=[], lhSelected=new Set();
+let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
+
 const PAGES={
   domains:{title:'Домены',sub:'Список доменов с DNS записями'},
   template:{title:'Шаблон DNS',sub:'Применяется к новым доменам автоматически'},
   deploy:{title:'Деплой',sub:'Создание зон и применение DNS записей'},
+  luxhost:{title:'LuxHost',sub:'Покупка доменов · Смена NS · Управление'},
   logs:{title:'Логи',sub:'История операций'},
   settings:{title:'Настройки',sub:'CF API и конфигурация'}
 };
@@ -561,6 +637,9 @@ function subscribeAll(){
 function loadCF(){
   unsub.cf=db.collection('settings').doc('cloudflare').onSnapshot(doc=>{
     if(doc.exists){ cfCfg=doc.data(); document.getElementById('cf-tok').value=cfCfg.token||''; document.getElementById('cf-acc').value=cfCfg.account||''; setDot(!!cfCfg.token); }
+  });
+  db.collection('settings').doc('luxhost').get().then(doc=>{
+    if(doc.exists && doc.data().token){ document.getElementById('lh-token').value=doc.data().token; }
   });
 }
 
@@ -739,8 +818,8 @@ function openAddRecModal(domId){
 // ══ BULK APPLY ══
 function openBulkModal(){
   if(!selectedDomains.size){alert('Выберите домены');return;}
-  document.getElementById('bulk-info').textContent=`Записи будут применены к ${selectedDomains.size} доменам.`;
-  bulkRecs=[...tplRecs.map(r=>({type:r.type,name:r.name,value:r.value,ttl:r.ttl,proxied:r.proxied}))];
+  document.getElementById('bulk-info').textContent=`Записи будут применены к ${selectedDomains.size} доменам. Выберите шаблон или добавьте вручную.`;
+  bulkRecs=[];
   bulkProxy=true; renderBulkRecs();
   document.getElementById('bulk-modal').style.display='flex';
 }
@@ -771,7 +850,7 @@ function clearBulkRecs(){ bulkRecs=[]; renderBulkRecs(); }
 
 function applyBulkTpl(name){
   const IP='1.2.3.4';
-  const T={basic:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true}],mail:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}],full:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false},{type:'A',name:'ftp',value:IP,ttl:1,proxied:false}]};
+  const T={basic:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true}],mail:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}],full:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}]};
   bulkRecs=[...T[name]]; renderBulkRecs();
 }
 
@@ -832,7 +911,7 @@ async function clearTpl(){ if(!confirm('Очистить шаблон?'))return;
 
 async function applyTpl(name){
   const IP='1.2.3.4';
-  const T={basic:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true}],mail:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}],full:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false},{type:'A',name:'ftp',value:IP,ttl:1,proxied:false}]};
+  const T={basic:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true}],mail:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}],full:[{type:'A',name:'@',value:IP,ttl:1,proxied:true},{type:'A',name:'www',value:IP,ttl:1,proxied:true},{type:'A',name:'mail',value:IP,ttl:1,proxied:false}]};
   const existing=new Set(tplRecs.map(r=>r.type+'|'+r.name));
   let added=0;
   for(const r of T[name]){ if(!existing.has(r.type+'|'+r.name)){ await db.collection('template').add({...r,createdAt:firebase.firestore.FieldValue.serverTimestamp()}); added++; } }
@@ -933,6 +1012,12 @@ async function saveCF(){
   setDot(!!token); log('ok','CF настройки сохранены');alert('✅ Сохранено!');
 }
 
+async function saveLhToken(){
+  const token=v('lh-token');
+  await db.collection('settings').doc('luxhost').set({token,updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  log('ok','LuxHost токен сохранён');alert('✅ Сохранено!');
+}
+
 async function testAPI(){
   const token=v('cf-tok'); if(!token){alert('Введите API Token');return;}
   log('info','Проверка CF API…');
@@ -972,6 +1057,231 @@ function log(type,msg){
 }
 function clearLogs(){ logs=[]; document.getElementById('terminal').innerHTML=''; document.getElementById('nb-l').textContent='0'; document.getElementById('l-meta').textContent='0 записей'; }
 function exportLogs(){ const a=document.createElement('a'); a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(logs.map(l=>`[${l.t}] [${l.type.toUpperCase()}] ${l.msg}`).join('\n')); a.download=`cf-logs-${Date.now()}.txt`; a.click(); }
+
+
+// ══ LUXHOST API ══
+function getLhToken(){ return document.getElementById('lh-token')?.value?.trim() || ''; }
+
+async function lhReq(method, path, body){
+  const token = getLhToken();
+  if(!token){ alert('Введите LuxHost API Token в Настройках'); return null; }
+  try{
+    const opts = { method, headers: { 'Content-Type':'application/json', 'X-Target':'luxhost', 'X-API-Key': token } };
+    if(body && method !== 'GET') opts.body = JSON.stringify(body);
+    const res = await fetch(PROXY_URL + path, opts);
+    return await res.json();
+  } catch(e){ log('err','LuxHost API: '+e.message); return null; }
+}
+
+async function lhGetBalance(){
+  log('info','Запрос баланса LuxHost...');
+  const data = await lhReq('GET', '/public/api/users/me');
+  if(data && data.balance !== undefined){
+    document.getElementById('lh-balance').textContent = '$' + parseFloat(data.balance).toFixed(2);
+    document.getElementById('nb-lh').textContent = '$' + parseFloat(data.balance).toFixed(2);
+    log('ok', 'Баланс: $' + data.balance);
+  } else { log('err','Не удалось получить баланс'); }
+}
+
+async function lhSearch(){
+  const q = document.getElementById('lh-search-input').value.trim();
+  if(!q){ alert('Введите домен'); return; }
+  log('info', 'Поиск домена: '+q);
+  const res = document.getElementById('lh-search-results');
+  res.innerHTML = '<div style="font-size:11px;color:var(--text3)">⟳ Поиск...</div>';
+  const data = await lhReq('GET', '/public/api/domains/search?domain='+encodeURIComponent(q));
+  if(!data){ res.innerHTML = ''; return; }
+  const items = Array.isArray(data) ? data : (data.domains || data.results || [data]);
+  if(!items.length){ res.innerHTML = '<div style="font-size:11px;color:var(--text3)">Ничего не найдено</div>'; return; }
+  res.innerHTML = items.map(d => {
+    const avail = d.available !== false;
+    const price = d.price ? '$'+d.price : '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-top:5px;font-size:12px">
+      <span style="color:var(--blue);font-weight:500">${d.domain||d.name||q}</span>
+      <span style="color:${avail?'var(--green)':'var(--red)'}">${avail?'✓ Доступен':'✗ Занят'}</span>
+      ${price ? '<span style="color:var(--text3)">'+price+'</span>' : ''}
+      ${avail ? '<button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="lhBuyOne(''+( d.domain||d.name||q)+'')">🛒 Купить</button>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function lhBulkSearch(){
+  const lines = document.getElementById('lh-bulk-input').value.split('\n').map(l=>l.trim().toLowerCase()).filter(l=>l&&l.includes('.'));
+  if(!lines.length){ alert('Введите домены'); return; }
+  log('info', 'Массовая проверка: '+lines.length+' доменов');
+  document.getElementById('lh-bulk-stat').textContent = '⟳ Проверяю...';
+  lhSelected.clear();
+  const data = await lhReq('POST', '/public/api/domains/search/bulk', { domains: lines });
+  const items = Array.isArray(data) ? data : (data?.domains || data?.results || []);
+  let avail=0;
+  document.getElementById('lh-bulk-results').innerHTML = items.map(d => {
+    const isAvail = d.available !== false;
+    if(isAvail) avail++;
+    const price = d.price ? '$'+d.price : '';
+    const id = d.domain||d.name||'';
+    return `<div class="d-row-head" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+      ${isAvail ? '<input type="checkbox" class="d-checkbox" onchange="toggleLhSelect(''+id+'',this.checked)">' : '<span style="width:14px"></span>'}
+      <span class="d-name">${id}</span>
+      ${price ? '<span style="font-size:11px;color:var(--text3)">'+price+'</span>' : ''}
+      <span class="pill ${isAvail?'pill-done':'pill-error'}">${isAvail?'доступен':'занят'}</span>
+      ${isAvail ? '<button class="btn btn-sm btn-primary" onclick="lhBuyOne(''+id+'')">🛒</button>' : ''}
+    </div>`;
+  }).join('') || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
+  document.getElementById('lh-bulk-stat').textContent = `Доступно: ${avail} из ${items.length}`;
+  log('ok', `Проверено: ${items.length}, доступно: ${avail}`);
+}
+
+function toggleLhSelect(domain, checked){ checked ? lhSelected.add(domain) : lhSelected.delete(domain); }
+
+async function lhBuyOne(domain){
+  if(!confirm('Купить домен '+domain+'?')) return;
+  log('info', 'Покупка: '+domain);
+  const data = await lhReq('POST', '/public/api/domains/purchase', { domain });
+  if(data && !data.error){
+    log('ok', domain+' куплен! Запускаем автоматику...');
+    await autoSetupDomain(domain, data.id || data.domainId);
+  } else { log('err', 'Ошибка покупки '+domain+': '+(data?.error||data?.message||'неизвестно')); }
+}
+
+async function lhBuySelected(){
+  if(!lhSelected.size){ alert('Выберите домены галочками'); return; }
+  if(!confirm('Купить '+lhSelected.size+' доменов?')) return;
+  for(const domain of lhSelected){
+    await lhBuyOne(domain);
+    await sleep(1000);
+  }
+}
+
+async function autoSetupDomain(domain, domainId){
+  const cfToken = document.getElementById('cf-tok').value.trim();
+  const cfAccount = document.getElementById('cf-acc').value.trim();
+  if(!cfToken || !cfAccount){ log('warn', 'CF токен не настроен — NS не обновлён'); return; }
+
+  // 1. Create CF zone
+  log('info', '['+domain+'] Создаём зону в Cloudflare...');
+  const zoneRes = await fetch(PROXY_URL+'/zones', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
+    body: JSON.stringify({name:domain, account:{id:cfAccount}, jump_start:false})
+  });
+  const zoneData = await zoneRes.json();
+  if(!zoneData.success){ log('err','['+domain+'] CF зона: '+(zoneData.errors?.[0]?.message||'ошибка')); return; }
+
+  const zoneId = zoneData.result.id;
+  const nsServers = zoneData.result.name_servers;
+  log('ok', '['+domain+'] Зона создана. NS: '+nsServers.join(', '));
+
+  // 2. Apply template DNS records
+  const recs = tplRecs;
+  for(const rec of recs){
+    await fetch(PROXY_URL+'/zones/'+zoneId+'/dns_records', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
+      body: JSON.stringify({type:rec.type,name:rec.name,content:rec.value,ttl:rec.ttl,proxied:rec.proxied})
+    });
+  }
+  if(recs.length) log('ok', '['+domain+'] Применено '+recs.length+' DNS записей');
+
+  // 3. Set NS at LuxHost
+  if(domainId && nsServers.length){
+    log('info', '['+domain+'] Меняем NS у LuxHost...');
+    const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
+    if(nsRes && !nsRes.error){ log('ok', '['+domain+'] NS обновлены на CF серверы ✓'); }
+    else { log('warn', '['+domain+'] NS не обновлён: '+(nsRes?.error||nsRes?.message||'проверь вручную')); }
+  }
+
+  // 4. Add to panel domains list
+  await db.collection('domains').add({
+    name: domain, status:'done', zoneId,
+    records: recs.map(r=>({type:r.type,name:r.name,value:r.value,ttl:r.ttl,proxied:r.proxied})),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: user.email
+  });
+  log('ok', '['+domain+'] ✅ Полная автоматика завершена!');
+  lhGetBalance();
+}
+
+async function lhGetDomains(){
+  log('info', 'Загрузка доменов LuxHost...');
+  const data = await lhReq('GET', '/public/api/domains/list');
+  const items = Array.isArray(data) ? data : (data?.domains || data?.items || data?.data || []);
+  lhDomains = items;
+  document.getElementById('lh-domains-cnt').textContent = items.length + ' доменов';
+  const list = document.getElementById('lh-domains-list');
+  if(!items.length){ list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>'; return; }
+  list.innerHTML = items.map(d => {
+    const exp = d.expiresAt || d.expiry || d.expired_at || '';
+    const ns = d.nameservers ? d.nameservers.join(', ') : '—';
+    return `<div class="d-row-head" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+      <span class="d-name">${d.domain||d.name||d.id}</span>
+      ${exp ? '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>' : ''}
+      <span style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ns}</span>
+      <button class="btn btn-sm" onclick="lhSetCfNs('${d.id||d.domainId}','${d.domain||d.name}')">☁ NS → CF</button>
+    </div>`;
+  }).join('');
+  log('ok', 'Загружено доменов: '+items.length);
+}
+
+async function lhSetCfNs(domainId, domain){
+  const cfToken = document.getElementById('cf-tok').value.trim();
+  const cfAccount = document.getElementById('cf-acc').value.trim();
+  if(!cfToken || !cfAccount){ alert('Настройте CF API Token и Account ID'); return; }
+  if(!confirm('Сменить NS для '+domain+' на Cloudflare?')) return;
+  // Get NS from existing CF zone or create new
+  log('info', '['+domain+'] Ищем зону в CF...');
+  const listRes = await fetch(PROXY_URL+'/zones?name='+domain, {
+    headers:{'X-Target':'cloudflare','X-API-Key':cfToken}
+  });
+  const listData = await listRes.json();
+  let nsServers, zoneId;
+  if(listData.success && listData.result?.[0]){
+    nsServers = listData.result[0].name_servers;
+    zoneId = listData.result[0].id;
+    log('ok', '['+domain+'] Зона найдена: '+zoneId);
+  } else {
+    log('info', '['+domain+'] Создаём зону в CF...');
+    const zoneRes = await fetch(PROXY_URL+'/zones', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
+      body: JSON.stringify({name:domain, account:{id:cfAccount}, jump_start:false})
+    });
+    const zoneData = await zoneRes.json();
+    if(!zoneData.success){ log('err','Ошибка CF: '+zoneData.errors?.[0]?.message); return; }
+    nsServers = zoneData.result.name_servers;
+    zoneId = zoneData.result.id;
+    log('ok', '['+domain+'] Зона создана');
+  }
+  // Set NS at LuxHost
+  const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
+  if(nsRes && !nsRes.error){ log('ok', '['+domain+'] NS → '+nsServers.join(', ')+' ✓'); alert('✅ NS обновлены!'); }
+  else { log('err', '['+domain+'] Ошибка NS: '+(nsRes?.error||nsRes?.message||'?')); }
+  lhGetDomains();
+}
+
+
+async function lhCreateInvoice(){
+  const amount = document.getElementById('lh-topup-amount').value.trim();
+  const currency = document.getElementById('lh-topup-currency').value;
+  if(!amount || parseFloat(amount) <= 0){ alert('Введите сумму'); return; }
+  log('info', 'Создаём счёт на $'+amount+' ('+currency+')...');
+  const result = document.getElementById('lh-invoice-result');
+  result.innerHTML = '<div style="font-size:11px;color:var(--text3)">⟳ Создаю счёт...</div>';
+  const data = await lhReq('POST', '/public_api/payments/createInvoice', { amount: parseFloat(amount), currency });
+  if(!data || data.error){
+    result.innerHTML = '<div style="font-size:11px;color:var(--red)">Ошибка: '+(data?.error||data?.message||'неизвестно')+'</div>';
+    log('err', 'Ошибка создания счёта: '+(data?.error||data?.message));
+    return;
+  }
+  const payUrl = data.pay_url || data.url || data.payUrl || data.link || '';
+  const address = data.address || data.wallet || '';
+  const payAmount = data.pay_amount || data.amount_crypto || '';
+  log('ok', 'Счёт создан! Сумма к оплате: '+payAmount+' '+currency);
+  result.innerHTML = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px;text-align:left">
+    <div style="font-size:11px;color:var(--green);font-weight:600;margin-bottom:6px">✓ Счёт создан</div>
+    ${payAmount ? '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">К оплате: <span style="color:var(--text)">'+(payAmount+' '+currency)+'</span></div>' : ''}
+    ${address ? '<div style="font-size:10px;color:var(--text3);word-break:break-all;margin-bottom:6px">'+address+'</div>' : ''}
+    ${payUrl ? '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:7px;background:var(--accent);color:#000;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none">💳 Перейти к оплате</a>' : ''}
+  </div>`;
+}
 
 // ══ UTILS ══
 function toggleEye(id,btn){ const i=document.getElementById(id); i.type=i.type==='password'?'text':'password'; btn.textContent=i.type==='password'?'👁':'🙈'; }
