@@ -23,6 +23,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background-image:linear-gradient(rgba(91,164,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(91,164,255,.03) 1px,transparent 1px);
   background-size:44px 44px}
 
+/* MODAL FONT OVERRIDE */
+#ui-modal, #ui-modal * {
+  font-family: 'Syne', sans-serif !important;
+}
+#ui-modal-body {
+  font-family: 'Syne', sans-serif !important;
+  font-size: 14px !important;
+}
+#ui-modal-title {
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 700 !important;
+}
+#ui-modal .btn {
+  font-family: 'Syne', sans-serif !important;
+}
 /* LOGIN */
 #login-screen{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--bg)}
 .login-card{width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:hidden;animation:slideUp .35s ease}
@@ -496,7 +511,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
               <button class="btn" style="width:100%;justify-content:center;margin-top:10px" onclick="lhGetBalance()">🔄 Обновить</button>
               <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
                 <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500">Пополнить баланс</div>
-                <input type="number" id="lh-topup-amount" placeholder="Сумма в USD" min="1" style="margin-bottom:7px">
+                <input type="number" id="lh-topup-amount" placeholder="Сумма в USD" min="5" step="1" style="margin-bottom:4px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:7px">Минимальная сумма: $5</div>
                 <select id="lh-topup-currency" style="margin-bottom:8px">
                   <option value="USDT_TRC20">USDT TRC20</option>
                   <option value="USDT_ERC20">USDT ERC20</option>
@@ -1338,17 +1354,17 @@ async function lhBuyCart(){
 
   if(failCount === 0){
     lhClearCart();
-    await uiSuccess(
-      '<span style="color:var(--green);font-family:var(--sans);font-size:16px">'+successCount+'</span> доменов успешно куплены!',
-      'Покупка завершена'
+    await uiSuccess('Все домены успешно куплены!', 'Готово');
+  } else if(successCount === 0){
+    await uiError(
+      'У вас недостаточный баланс.<br><br>Пожалуйста пополните ваш счёт.',
+      'Недостаточно средств'
     );
   } else {
     await uiWarn(
-      'Куплено: <b style="color:var(--green)">'+successCount+'</b><br>'
-      + 'Ошибок: <b style="color:var(--red)">'+failCount+'</b><br><br>'
-      + 'Домены с ошибками остались в корзине.<br>'
-      + 'Проверьте баланс и попробуйте снова.',
-      'Результат покупки'
+      'Часть доменов не удалось купить из-за недостаточного баланса.<br><br>'
+      + 'Пожалуйста пополните ваш счёт и попробуйте снова.',
+      'Недостаточно средств'
     );
   }
   lhGetBalance();
@@ -1476,13 +1492,7 @@ async function lhBuyOne(domain){
     }
     log('err', '['+domain+'] '+errMsg+' (raw: '+String(rawErr).slice(0,80)+')');
     // Show error immediately for balance issues
-    if(errMsg === 'Недостаточно средств на балансе'){
-      await uiWarn(
-        'На вашем балансе недостаточно средств для покупки домена <b style="color:var(--blue)">'+domain+'</b>.<br><br>'
-        + 'Пополните баланс в разделе LuxHost.',
-        'Недостаточно средств'
-      );
-    }
+    // Don't show per-domain popup, handled in summary
     return false;
   }
 }
@@ -1627,14 +1637,23 @@ async function lhSetCfNs(domainId, domain){
 async function lhCreateInvoice(){
   const amount = document.getElementById('lh-topup-amount').value.trim();
   const currency = document.getElementById('lh-topup-currency').value;
-  if(!amount || parseFloat(amount) <= 0){ await uiWarn('Введите сумму для пополнения баланса', 'Укажите сумму'); return; }
+  const amountNum = parseFloat(amount);
+  if(!amount || amountNum <= 0){ await uiWarn('Введите сумму для пополнения баланса', 'Укажите сумму'); return; }
+  if(amountNum < 5){ await uiWarn('Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b>', 'Слишком маленькая сумма'); return; }
   log('info', 'Создаём счёт на $'+amount+' ('+currency+')...');
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3)">Создаю...</div>';
-  const data = await lhReq('POST', '/public_api/payments/createInvoice', { amount: parseFloat(amount)*100, currency: currency });
-  if(!data || data.error){
-    result.innerHTML = '<div style="font-size:11px;color:var(--red)">Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа')+'</div>';
-    log('err', 'Ошибка создания счёта');
+  const data = await lhReq('POST', '/public/api/payments/createInvoice', { amount: parseFloat(amount), currency: currency });
+  if(!data || data.error || data.message){
+    const errText = data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа';
+    const errLow = String(errText).toLowerCase();
+    let friendlyErr = errText;
+    if(errLow.includes('minimum') || errLow.includes('min')) friendlyErr = 'Минимальная сумма пополнения — $5';
+    else if(errLow.includes('bad request')) friendlyErr = 'Некорректный запрос. Проверьте сумму и попробуйте снова.';
+    else if(errLow.includes('auth') || errLow.includes('token')) friendlyErr = 'Ошибка авторизации. Проверьте API токен.';
+    result.innerHTML = '';
+    await uiError(friendlyErr, 'Ошибка создания счёта');
+    log('err', 'Ошибка счёта: '+errText);
     return;
   }
   const payUrl = data.pay_url || data.url || data.payUrl || data.link || '';
