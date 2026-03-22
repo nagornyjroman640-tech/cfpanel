@@ -199,12 +199,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
 
 <!-- CUSTOM ALERT/CONFIRM MODAL -->
 <div id="ui-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
-  <div id="ui-modal" style="width:400px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;animation:slideUp .2s ease;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+  <div id="ui-modal" style="width:420px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;animation:slideUp .2s ease;box-shadow:0 20px 60px rgba(0,0,0,.5);font-family:var(--sans)">
     <div style="padding:18px 22px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
       <span id="ui-modal-icon" style="font-size:20px">ℹ️</span>
-      <span id="ui-modal-title" style="font-family:var(--sans);font-weight:700;font-size:15px;flex:1;color:var(--text)"></span>
+      <span id="ui-modal-title" style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;flex:1;color:var(--text)"></span>
     </div>
-    <div id="ui-modal-body" style="padding:16px 22px;font-size:13px;color:var(--text2);line-height:1.7;max-height:320px;overflow-y:auto;font-family:var(--sans)"></div>
+    <div id="ui-modal-body" style="padding:16px 22px;font-size:14px;color:var(--text2);line-height:1.7;max-height:320px;overflow-y:auto;font-family:'Syne',sans-serif"></div>
     <div id="ui-modal-foot" style="padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end"></div>
   </div>
 </div>
@@ -1344,7 +1344,10 @@ async function lhBuyCart(){
     );
   } else {
     await uiWarn(
-      'Куплено: <b style="color:var(--green)">'+successCount+'</b><br>Ошибок: <b style="color:var(--red)">'+failCount+'</b><br><br>Домены с ошибками остались в корзине.',
+      'Куплено: <b style="color:var(--green)">'+successCount+'</b><br>'
+      + 'Ошибок: <b style="color:var(--red)">'+failCount+'</b><br><br>'
+      + 'Домены с ошибками остались в корзине.<br>'
+      + 'Проверьте баланс и попробуйте снова.',
       'Результат покупки'
     );
   }
@@ -1458,8 +1461,28 @@ async function lhBuyOne(domain){
     await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
     return true;
   } else {
-    const errMsg = data ? (data.error || data.message || JSON.stringify(data).slice(0,100)) : 'нет ответа';
-    log('err', '['+domain+'] Ошибка: '+errMsg);
+    const rawErr = data ? (data.error || data.message || data.msg || JSON.stringify(data)) : 'нет ответа';
+    let errMsg = rawErr;
+    // Parse common error messages
+    const errLow = String(rawErr).toLowerCase();
+    if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
+      errMsg = 'Недостаточно средств на балансе';
+    } else if(errLow.includes('already') || errLow.includes('exist')){
+      errMsg = 'Домен уже зарегистрирован';
+    } else if(errLow.includes('invalid') || errLow.includes('bad request')){
+      errMsg = 'Некорректный запрос';
+    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('key')){
+      errMsg = 'Ошибка авторизации — проверьте API токен';
+    }
+    log('err', '['+domain+'] '+errMsg+' (raw: '+String(rawErr).slice(0,80)+')');
+    // Show error immediately for balance issues
+    if(errMsg === 'Недостаточно средств на балансе'){
+      await uiWarn(
+        'На вашем балансе недостаточно средств для покупки домена <b style="color:var(--blue)">'+domain+'</b>.<br><br>'
+        + 'Пополните баланс в разделе LuxHost.',
+        'Недостаточно средств'
+      );
+    }
     return false;
   }
 }
