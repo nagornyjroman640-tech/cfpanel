@@ -1249,6 +1249,7 @@ async function lhReq(method, path, body){
 async function lhGetBalance(){
   log('info','Запрос баланса LuxHost...');
   const data = await lhReq('GET', '/public/api/users/me');
+  log('info', 'Invoice response: ' + JSON.stringify(data).slice(0, 200));
   if(!data){ log('err','Нет ответа'); return; }
   log('info', 'RAW баланс: ' + JSON.stringify(data).slice(0,300));
   const rawBal = data.balance !== undefined ? data.balance : (data.Balance !== undefined ? data.Balance : null);
