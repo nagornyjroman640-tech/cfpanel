@@ -1531,8 +1531,10 @@ async function lhBuyOne(domain){
   log('info', '['+domain+'] Покупка...');
 
   // LuxHost API v2: POST /api/v2/domains/purchase
-  // Body: {domains: [{contactId, domain, ns}]}
-  // Auth: Bearer JWT
+  // NS servers are REQUIRED — cannot be empty
+  // Default to LuxHost NS, will be changed to CF later in autoSetupDomain
+  const defaultNs = ['ns3.my-ndns.com', 'ns4.my-ndns.com'];
+
   let data = null;
   try{
     const res = await fetch(PROXY_URL + '/api/v2/domains/purchase', {
@@ -1546,7 +1548,7 @@ async function lhBuyOne(domain){
         domains: [{
           contactId: contactId,
           domain: domain,
-          ns: []
+          ns: defaultNs
         }]
       })
     });
@@ -1564,8 +1566,10 @@ async function lhBuyOne(domain){
     return false;
   }
 
-  // API may return array or single object
-  const result = Array.isArray(data) ? data[0] : data;
+  // API may return array or single object or nested array
+  let result = data;
+  if(Array.isArray(data)) result = data[0];
+  if(Array.isArray(result)) result = result[0];
 
   // Success — response has id and domain
   const hasId = result && (result.id || result.domainId || result.domain_id);
