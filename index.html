@@ -1167,10 +1167,15 @@ function lhRenderCart(){
 }
 
 function lhAddToCart(domain, priceRaw){
+  if(!domain || !domain.includes('.')){
+    log('err', 'Некорректный домен: '+domain);
+    return;
+  }
+  // priceRaw is in cents from API
   const price = priceRaw ? (parseFloat(priceRaw) / 100) : 0;
   lhCart.set(domain, { price: price, priceRaw: priceRaw });
   lhRenderCart();
-  log('ok', domain + ' добавлен в корзину' + (price ? ' ($'+price.toFixed(2)+')' : ''));
+  log('ok', domain + ' → корзина' + (price ? ' ($'+price.toFixed(2)+')' : ' (цена неизвестна)'));
 }
 
 function lhRemoveFromCart(domain){
@@ -1206,100 +1211,83 @@ async function lhSearch(){
   log('info', 'Поиск: '+q);
   const res = document.getElementById('lh-search-results');
   res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Поиск...</div>';
+
   const data = await lhReq('GET', '/public/api/domains/search?domain='+encodeURIComponent(q));
-  if(!data){ res.innerHTML = ''; return; }
+  if(!data){ res.innerHTML = '<div style="font-size:11px;color:var(--red);padding:8px">Ошибка запроса</div>'; return; }
 
-  // RAW LOG - чтобы понять структуру ответа
-  log('info', 'RAW поиск: ' + JSON.stringify(data).slice(0, 500));
-
-  // Handle different response formats
-  let items = [];
-  if(Array.isArray(data)) items = data;
-  else if(data.domains) items = data.domains;
-  else if(data.results) items = data.results;
-  else if(data.domain) items = [data];
-  else items = [data];
-
-  log('info', 'Найдено вариантов: ' + items.length + ', первый: ' + JSON.stringify(items[0]).slice(0,200));
-
-  // Deduplicate by domain name
-  const seen = new Set();
-  items = items.filter(function(d){
-    const name = d.domain || d.name || q;
-    if(seen.has(name)) return false;
-    seen.add(name);
-    return true;
-  });
-
+  // API returns array of TLD variants
+  const items = Array.isArray(data) ? data : (data.domains || data.results || []);
   if(!items.length){
     res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Ничего не найдено</div>';
     return;
   }
 
+  log('info', 'Найдено TLD вариантов: '+items.length);
+
   let html = '';
   items.forEach(function(d){
-    const avail = d.available !== false && d.available !== 0;
-    const name = d.domain || d.name || q;
-    const rawPrice = d.price || d.cost || d.register_price || d.registrationPrice || 0;
-    const priceDisplay = rawPrice ? '$' + (parseFloat(rawPrice)/100).toFixed(2) : '';
+    const domain = d.status ? d.status.domain : (d.domain || '');
+    const avail  = d.status ? d.status.available : (d.available !== false);
+    const isPremium = d.status ? d.status.premium : false;
+    // actualPrice is in cents
+    const rawPrice = d.actualPrice || d.prices && d.prices['1'] || 0;
+    const priceDisplay = rawPrice ? '$'+(rawPrice/100).toFixed(2) : '';
+    const renewDisplay = d.renewalPrice ? '$'+(d.renewalPrice/100).toFixed(2)+'/год' : '';
 
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">';
-    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+name+'</span>';
-    if(priceDisplay) html += '<span style="color:var(--accent);font-weight:600">'+priceDisplay+'</span>';
-    html += '<span style="font-size:10px;color:'+(avail?'var(--green)':'var(--red)')+'">'+( avail?'✓ Доступен':'✗ Занят')+'</span>';
-    if(avail){
-      html += '<button class="btn btn-sm btn-primary" data-domain="'+name+'" data-price="'+rawPrice+'" data-act="addcart">+ В корзину</button>';
-    }
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg'+(avail?'3':'4')+');border:1px solid var(--border);border-radius:6px;font-size:12px">';
+    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+domain+'</span>';
+    if(isPremium) html += '<span style="font-size:9px;color:var(--yellow);background:rgba(255,211,42,.15);border:1px solid rgba(255,211,42,.3);padding:1px 5px;border-radius:3px">PREMIUM</span>';
+    if(priceDisplay) html += '<span style="color:var(--accent);font-weight:700">'+priceDisplay+'</span>';
+    if(renewDisplay) html += '<span style="font-size:10px;color:var(--text3)">↻ '+renewDisplay+'</span>';
+    html += '<span style="font-size:10px;font-weight:600;color:'+(avail?'var(--green)':'var(--red)')+'">'+( avail?'✓':'✗')+'</span>';
+    if(avail) html += '<button class="btn btn-sm btn-primary" data-domain="'+domain+'" data-price="'+rawPrice+'" data-act="addcart">+ Корзина</button>';
     html += '</div>';
   });
   res.innerHTML = html;
 }
 
-// ── BULK SEARCH ──
 async function lhBulkSearch(){
   const lines = document.getElementById('lh-bulk-input').value.split('\n')
     .map(function(l){ return l.trim().toLowerCase(); })
     .filter(function(l){ return l && l.includes('.'); });
-  if(!lines.length){ alert('Введите домены'); return; }
+  if(!lines.length){ alert('Введите домены (с зоной, например example.com)'); return; }
   log('info', 'Массовая проверка: '+lines.length+' доменов');
-  document.getElementById('lh-bulk-stat').textContent = 'Проверяю ' + lines.length + ' доменов...';
+  document.getElementById('lh-bulk-stat').textContent = 'Проверяю...';
   document.getElementById('lh-bulk-results').innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Идёт проверка...</div>';
 
   const data = await lhReq('POST', '/public/api/domains/search/bulk', { domains: lines });
-  let items = [];
-  if(Array.isArray(data)) items = data;
-  else if(data && data.domains) items = data.domains;
-  else if(data && data.results) items = data.results;
+  // Bulk returns array of same structure as single search
+  let items = Array.isArray(data) ? data : (data && (data.domains||data.results) ? (data.domains||data.results) : []);
 
-  let avail = 0, totalPrice = 0;
+  let avail=0, totalPrice=0;
   let html = '';
 
   items.forEach(function(d){
-    const isAvail = d.available !== false && d.available !== 0;
-    if(isAvail) avail++;
-    const id = d.domain || d.name || '';
-    const rawPrice = d.price || d.cost || d.register_price || d.registrationPrice || 0;
-    const priceDisplay = rawPrice ? '$'+(parseFloat(rawPrice)/100).toFixed(2) : '—';
-    if(isAvail && rawPrice) totalPrice += parseFloat(rawPrice)/100;
+    const domain = d.status ? d.status.domain : (d.domain||'');
+    const isAvail = d.status ? d.status.available : (d.available!==false);
+    const isPremium = d.status ? d.status.premium : false;
+    const rawPrice = d.actualPrice || (d.prices && d.prices['1']) || 0;
+    const priceDisplay = rawPrice ? '$'+(rawPrice/100).toFixed(2) : '—';
+    if(isAvail){ avail++; if(rawPrice) totalPrice += rawPrice/100; }
 
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg'+(isAvail?'3':'4')+');border:1px solid var(--border);border-radius:6px">';
     if(isAvail){
-      html += '<input type="checkbox" class="lh-bulk-check" data-domain="'+id+'" data-price="'+rawPrice+'" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">';
+      html += '<input type="checkbox" class="lh-bulk-check" data-domain="'+domain+'" data-price="'+rawPrice+'" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">';
     } else {
-      html += '<span style="width:14px;flex-shrink:0"></span>';
+      html += '<span style="width:14px;flex-shrink:0;display:inline-block"></span>';
     }
-    html += '<span style="flex:1;color:var(--blue);font-weight:500;font-size:12px">'+id+'</span>';
-    html += '<span style="color:var(--accent);font-size:11px;font-weight:600">'+priceDisplay+'</span>';
-    html += '<span class="pill '+(isAvail?'pill-done':'pill-error')+'" style="font-size:10px">'+(isAvail?'доступен':'занят')+'</span>';
-    if(isAvail){
-      html += '<button class="btn btn-sm btn-primary" data-domain="'+id+'" data-price="'+rawPrice+'" data-act="addcart">+ Корзина</button>';
-    }
+    html += '<span style="flex:1;color:var(--blue);font-weight:500;font-size:12px">'+domain+'</span>';
+    if(isPremium) html += '<span style="font-size:9px;color:var(--yellow);background:rgba(255,211,42,.15);border:1px solid rgba(255,211,42,.3);padding:1px 5px;border-radius:3px">PREMIUM</span>';
+    html += '<span style="color:var(--accent);font-size:11px;font-weight:700">'+priceDisplay+'</span>';
+    html += '<span class="pill '+(isAvail?'pill-done':'pill-error')+'" style="font-size:10px">'+(isAvail?'✓ доступен':'✗ занят')+'</span>';
+    if(isAvail) html += '<button class="btn btn-sm btn-primary" data-domain="'+domain+'" data-price="'+rawPrice+'" data-act="addcart">+</button>';
     html += '</div>';
   });
 
   document.getElementById('lh-bulk-results').innerHTML = html || '<div class="empty"><div class="empty-icon">🔍</div>Нет результатов</div>';
-  document.getElementById('lh-bulk-stat').textContent = 'Доступно: '+avail+' из '+items.length+(totalPrice ? ' · Итого: $'+totalPrice.toFixed(2) : '');
-  log('ok', 'Проверено: '+items.length+', доступно: '+avail);
+  const statText = 'Доступно: '+avail+' из '+items.length+(totalPrice ? ' · Итого: $'+totalPrice.toFixed(2) : '');
+  document.getElementById('lh-bulk-stat').textContent = statText;
+  log('ok', statText);
 }
 
 function lhAddSelectedToCart(){
@@ -1312,6 +1300,11 @@ function lhAddSelectedToCart(){
 
 // ── BUY ONE ──
 async function lhBuyOne(domain){
+  // Validate domain has TLD
+  if(!domain.includes('.')){
+    log('err', '['+domain+'] Укажите домен с зоной (например '+domain+'.com)');
+    return;
+  }
   log('info', '['+domain+'] Покупка...');
   const data = await lhReq('POST', '/public/api/domains/purchase', { domain: domain });
   if(data && !data.error && !data.message){
