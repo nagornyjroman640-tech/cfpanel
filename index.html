@@ -1631,14 +1631,14 @@ async function autoSetupDomain(domain, domainId){
   }
   if(recs.length) log('ok', '['+domain+'] Применено '+recs.length+' DNS записей');
 
-  // Set NS at LuxHost
+  // Set NS at LuxHost via smart multi-strategy
   if(domainId && nsServers.length){
     log('info', '['+domain+'] Меняем NS у LuxHost...');
-    const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
-    if(nsRes && !nsRes.error){
+    const nsOk = await lhChangeNs(domainId, domain, nsServers);
+    if(nsOk){
       log('ok', '['+domain+'] NS обновлены ✓');
     } else {
-      log('warn', '['+domain+'] NS: '+(nsRes ? (nsRes.error||nsRes.message||'?') : 'нет ответа'));
+      log('warn', '['+domain+'] NS не удалось обновить — попробуйте вручную через панель');
     }
   }
 
@@ -1880,6 +1880,153 @@ async function lhDeleteRecord(domId, domName, recIdx){
   }
 }
 
+// ── NS CHANGE HELPER ──
+// Tries multiple API endpoints and body formats for NS change
+// LuxHost API is inconsistent — some domains use v2, some use public API
+async function lhChangeNs(domId, domName, nsArr){
+  const jwt = getLhJwt();
+  const apiToken = getLhToken();
+
+  // We try multiple strategies in order:
+  const strategies = [];
+
+  // Strategy 1: v2 API with JWT — PUT /api/v2/domains/{id}/ns
+  if(jwt){
+    strategies.push({
+      label: 'v2 PUT /ns (JWT)',
+      method: 'PUT',
+      path: '/api/v2/domains/'+domId+'/ns',
+      body: { ns: nsArr },
+      token: jwt,
+      authType: 'jwt'
+    });
+  }
+
+  // Strategy 2: v2 API with JWT — POST /api/v2/domains/{id}/change-ns
+  if(jwt){
+    strategies.push({
+      label: 'v2 POST /change-ns (JWT)',
+      method: 'POST',
+      path: '/api/v2/domains/'+domId+'/change-ns',
+      body: { ns: nsArr },
+      token: jwt,
+      authType: 'jwt'
+    });
+  }
+
+  // Strategy 3: v2 with "nameservers" key
+  if(jwt){
+    strategies.push({
+      label: 'v2 POST /change-ns nameservers (JWT)',
+      method: 'POST',
+      path: '/api/v2/domains/'+domId+'/change-ns',
+      body: { nameservers: nsArr },
+      token: jwt,
+      authType: 'jwt'
+    });
+  }
+
+  // Strategy 4: public API with API key — original approach
+  if(apiToken){
+    strategies.push({
+      label: 'public POST /change-ns (API key)',
+      method: 'POST',
+      path: '/public/api/domains/'+domId+'/change-ns',
+      body: { nameservers: nsArr },
+      token: apiToken,
+      authType: 'apikey'
+    });
+  }
+
+  // Strategy 5: public API with "ns" key
+  if(apiToken){
+    strategies.push({
+      label: 'public POST /change-ns ns[] (API key)',
+      method: 'POST',
+      path: '/public/api/domains/'+domId+'/change-ns',
+      body: { ns: nsArr },
+      token: apiToken,
+      authType: 'apikey'
+    });
+  }
+
+  // Strategy 6: PATCH with JWT
+  if(jwt){
+    strategies.push({
+      label: 'v2 PATCH domain (JWT)',
+      method: 'PATCH',
+      path: '/api/v2/domains/'+domId,
+      body: { ns: nsArr },
+      token: jwt,
+      authType: 'jwt'
+    });
+  }
+
+  if(!strategies.length){
+    log('err', '['+domName+'] Нужен JWT Token или API Token. Настройте в разделе «Настройки».');
+    await uiError('Не настроен ни JWT Token, ни API Token для LuxHost.', 'Нет токенов');
+    return false;
+  }
+
+  for(let i = 0; i < strategies.length; i++){
+    const s = strategies[i];
+    log('info', '['+domName+'] Попытка '+(i+1)+'/'+strategies.length+': '+s.label);
+    try{
+      const res = await fetch(PROXY_URL + s.path, {
+        method: s.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Target': 'luxhost',
+          'X-API-Key': s.token,
+          'X-Auth-Type': s.authType
+        },
+        body: JSON.stringify(s.body)
+      });
+      const data = await res.json();
+      log('info', '['+domName+'] Ответ ('+s.label+'): '+JSON.stringify(data).slice(0, 250));
+
+      // Check for success
+      const isError = data && (data.error || data.statusCode >= 400 || data.status === 'error');
+      const is404 = res.status === 404;
+      const is401 = res.status === 401 || res.status === 403;
+
+      if(is404){
+        log('warn', '['+domName+'] 404 — эндпоинт не найден, пробуем следующий...');
+        continue;
+      }
+      if(is401){
+        log('warn', '['+domName+'] 401/403 — авторизация не прошла, пробуем следующий...');
+        continue;
+      }
+      if(isError){
+        const errMsg = data.error || data.message || JSON.stringify(data);
+        log('warn', '['+domName+'] Ошибка: '+String(errMsg).slice(0,150)+' — пробуем следующий...');
+        continue;
+      }
+
+      // If we got here, it's a success (or at least not an error)
+      log('ok', '['+domName+'] NS обновлены через '+s.label+' ✓');
+      return true;
+    } catch(e){
+      log('warn', '['+domName+'] Сетевая ошибка ('+s.label+'): '+e.message);
+      continue;
+    }
+  }
+
+  // All strategies failed
+  log('err', '['+domName+'] Все попытки смены NS провалились.');
+  await uiError(
+    'Не удалось сменить NS для '+domName+'.<br><br>'
+    + 'Попробуйте сменить NS вручную на <a href="https://luxhost.cc" target="_blank" style="color:var(--accent)">luxhost.cc</a>.<br><br>'
+    + '<b>Возможные причины:</b><br>'
+    + '• JWT токен истёк — обновите в Настройках<br>'
+    + '• Домен ещё не активирован<br>'
+    + '• API LuxHost изменился',
+    'Ошибка смены NS'
+  );
+  return false;
+}
+
 async function lhEditNs(domId, domName){
   const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
   const currentNs = dom && (dom.nameservers || dom.ns) ? (dom.nameservers || dom.ns).join('\n') : '';
@@ -1889,14 +2036,10 @@ async function lhEditNs(domId, domName){
   if(!nsArr.length){ await uiWarn('Введите хотя бы один NS сервер', 'Пусто'); return; }
 
   log('info', '['+domName+'] Меняем NS → '+nsArr.join(', '));
-  const data = await lhReq('POST', '/public/api/domains/'+domId+'/change-ns', { nameservers: nsArr });
-  if(data && !data.error){
-    log('ok', '['+domName+'] NS обновлены ✓');
+  const ok = await lhChangeNs(domId, domName, nsArr);
+  if(ok){
     await uiSuccess('NS обновлены: '+nsArr.join(', '), 'NS изменены');
     await lhGetDomains();
-  } else {
-    log('err', '['+domName+'] NS ошибка: '+(data ? (data.error||data.message||'?') : '?'));
-    await uiError(data ? (data.error||data.message||'Ошибка') : 'Нет ответа', 'Ошибка NS');
   }
 }
 
@@ -1905,13 +2048,53 @@ async function lhClearNs(domId, domName){
   if(!clrOk) return;
 
   log('info', '['+domName+'] Сброс NS...');
-  const data = await lhReq('POST', '/public/api/domains/setDNS', { domainId: domId });
-  if(data && !data.error){
+
+  // Try multiple approaches for clearing NS
+  const jwt = getLhJwt();
+  const apiToken = getLhToken();
+  let success = false;
+
+  // Try v2 with empty NS array (JWT)
+  if(jwt && !success){
+    try{
+      const res = await fetch(PROXY_URL + '/api/v2/domains/'+domId+'/ns', {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', 'X-Target':'luxhost', 'X-API-Key':jwt, 'X-Auth-Type':'jwt' },
+        body: JSON.stringify({ ns: [] })
+      });
+      const data = await res.json();
+      if(res.status < 400 && !data.error) success = true;
+      else log('info', 'v2 PUT ns:[] → '+JSON.stringify(data).slice(0,150));
+    } catch(e){}
+  }
+
+  // Try public API setDNS (API key)
+  if(apiToken && !success){
+    const data = await lhReq('POST', '/public/api/domains/setDNS', { domainId: domId });
+    if(data && !data.error) success = true;
+    else log('info', 'setDNS → '+(data ? JSON.stringify(data).slice(0,150) : 'null'));
+  }
+
+  // Try v2 PATCH with empty ns (JWT)
+  if(jwt && !success){
+    try{
+      const res = await fetch(PROXY_URL + '/api/v2/domains/'+domId, {
+        method: 'PATCH',
+        headers: { 'Content-Type':'application/json', 'X-Target':'luxhost', 'X-API-Key':jwt, 'X-Auth-Type':'jwt' },
+        body: JSON.stringify({ ns: [] })
+      });
+      const data = await res.json();
+      if(res.status < 400 && !data.error) success = true;
+    } catch(e){}
+  }
+
+  if(success){
     log('ok', '['+domName+'] NS сброшены — используются записи регистратора');
     await uiSuccess('NS сброшены. Теперь DNS записи активны.', 'NS сброшены');
     await lhGetDomains();
   } else {
-    log('err', '['+domName+'] Ошибка сброса: '+(data ? (data.error||data.message||JSON.stringify(data)) : '?'));
+    log('err', '['+domName+'] Ошибка сброса NS');
+    await uiError('Не удалось сбросить NS. Попробуйте вручную на luxhost.cc', 'Ошибка');
   }
 }
 
@@ -1919,9 +2102,19 @@ async function lhSetCfNs(domainId, domain){
   const cfToken = document.getElementById('cf-tok').value.trim();
   const cfAccount = document.getElementById('cf-acc').value.trim();
   if(!cfToken || !cfAccount){ await uiWarn('Перейдите в Настройки и заполните CF API Token и Account ID', 'CF не настроен'); return; }
-  const nsOk = await uiConfirm('Nameservers домена '+domain+' будут изменены на серверы Cloudflare.', 'Сменить NS?', {icon:'☁️',okText:'Сменить'});
+
+  const jwt = getLhJwt();
+  const apiToken = getLhToken();
+  if(!jwt && !apiToken){ await uiWarn('Нужен JWT Token или API Token для LuxHost. Настройте в разделе «Настройки».', 'Нет токена'); return; }
+
+  const nsOk = await uiConfirm(
+    'Nameservers домена <b>'+domain+'</b> будут изменены на серверы Cloudflare.<br><br>'
+    + (jwt ? '✅ JWT Token настроен' : '⚠️ JWT Token не настроен (рекомендуется для смены NS)'),
+    'Сменить NS на Cloudflare?', {icon:'☁️',okText:'Сменить'}
+  );
   if(!nsOk) return;
 
+  // Step 1: Get or create CF zone
   log('info', '['+domain+'] Ищем зону в CF...');
   const listRes = await fetch(PROXY_URL+'/zones?name='+domain, {
     headers:{'X-Target':'cloudflare','X-API-Key':cfToken,'Content-Type':'application/json'}
@@ -1932,7 +2125,7 @@ async function lhSetCfNs(domainId, domain){
   if(listData.success && listData.result && listData.result[0]){
     nsServers = listData.result[0].name_servers;
     zoneId = listData.result[0].id;
-    log('ok', '['+domain+'] Зона найдена: '+zoneId);
+    log('ok', '['+domain+'] Зона найдена: '+zoneId+' NS: '+nsServers.join(', '));
   } else {
     log('info', '['+domain+'] Создаём зону в CF...');
     const zoneRes = await fetch(PROXY_URL+'/zones', {
@@ -1941,18 +2134,33 @@ async function lhSetCfNs(domainId, domain){
       body: JSON.stringify({name:domain, account:{id:cfAccount}, jump_start:false})
     });
     const zoneData = await zoneRes.json();
-    if(!zoneData.success){ log('err','Ошибка CF: '+(zoneData.errors?zoneData.errors[0].message:'?')); return; }
+    if(!zoneData.success){
+      const errMsg = zoneData.errors ? zoneData.errors[0].message : 'неизвестная ошибка';
+      log('err','['+domain+'] Ошибка CF: '+errMsg);
+      await uiError('Не удалось создать зону в Cloudflare: '+errMsg, 'Ошибка CF');
+      return;
+    }
     nsServers = zoneData.result.name_servers;
     zoneId = zoneData.result.id;
-    log('ok', '['+domain+'] Зона создана');
+    log('ok', '['+domain+'] Зона создана: '+zoneId+' NS: '+nsServers.join(', '));
   }
 
-  const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
-  if(nsRes && !nsRes.error){
-    log('ok', '['+domain+'] NS → '+nsServers.join(', ')+' ✓');
-    await uiSuccess('Nameservers успешно обновлены на серверы Cloudflare.', 'NS обновлены');
-  } else {
-    log('err', '['+domain+'] NS ошибка: '+(nsRes ? (nsRes.error||nsRes.message||'?') : '?'));
+  if(!nsServers || !nsServers.length){
+    log('err', '['+domain+'] CF не вернул NS серверы');
+    await uiError('Cloudflare не вернул NS серверы для зоны.', 'Ошибка');
+    return;
+  }
+
+  // Step 2: Set NS at LuxHost via smart multi-strategy
+  log('info', '['+domain+'] Устанавливаем NS: '+nsServers.join(', '));
+  const ok = await lhChangeNs(domainId, domain, nsServers);
+  if(ok){
+    await uiSuccess(
+      'Nameservers успешно обновлены на серверы Cloudflare:<br><br>'
+      + nsServers.map(function(ns){ return '<span style="color:var(--blue);font-weight:600">'+ns+'</span>'; }).join('<br>')
+      + '<br><br><span style="font-size:11px;color:var(--text3)">Зона CF: '+zoneId+'</span>',
+      'NS обновлены ☁️'
+    );
   }
   lhGetDomains();
 }
