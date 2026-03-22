@@ -204,7 +204,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
       <span id="ui-modal-icon" style="font-size:20px">ℹ️</span>
       <span id="ui-modal-title" style="font-family:var(--sans);font-weight:800;font-size:14px;flex:1"></span>
     </div>
-    <div id="ui-modal-body" style="padding:18px 22px;font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
+    <div id="ui-modal-body" style="padding:16px 22px;font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:320px;overflow-y:auto;font-family:var(--mono)"></div>
     <div id="ui-modal-foot" style="padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end"></div>
   </div>
 </div>
@@ -632,6 +632,7 @@ function showApp(){
   document.getElementById('u-email').textContent=user.email;
   document.getElementById('fb-pid').textContent=firebase.app().options.projectId||'—';
   subscribeAll(); loadCF();
+  loadCart(); lhRenderCart();
   log('ok','Вошёл: '+user.email);
   // Event delegation for LuxHost dynamic buttons
   document.addEventListener('click', function(e){
@@ -1120,7 +1121,10 @@ function uiModal(opts){
     const ov = document.getElementById('ui-modal-ov');
     document.getElementById('ui-modal-icon').textContent  = opts.icon  || 'ℹ️';
     document.getElementById('ui-modal-title').textContent = opts.title || 'Сообщение';
-    document.getElementById('ui-modal-body').textContent  = opts.body  || '';
+    // Support HTML in body for colored text
+    const bodyEl = document.getElementById('ui-modal-body');
+    if(opts.html){ bodyEl.innerHTML = opts.body || ''; }
+    else { bodyEl.textContent = opts.body || ''; }
     const foot = document.getElementById('ui-modal-foot');
     foot.innerHTML = '';
     ov.style.display = 'flex';
@@ -1189,6 +1193,15 @@ function uiWarn(body, title){
 
 // ══ LUXHOST API ══
 let lhCart = new Map(); // domain -> {price, priceRaw}
+
+function saveCart(){ sessionStorage.setItem('lhCart', JSON.stringify(Array.from(lhCart.entries()))); }
+function loadCart(){
+  try{
+    const saved = sessionStorage.getItem('lhCart');
+    if(saved){ lhCart = new Map(JSON.parse(saved)); }
+  } catch(e){}
+}
+loadCart();
 
 function getLhToken(){
   return document.getElementById('lh-token') ? document.getElementById('lh-token').value.trim() : '';
@@ -1264,18 +1277,18 @@ function lhAddToCart(domain, priceRaw){
   // priceRaw is in cents from API
   const price = priceRaw ? (parseFloat(priceRaw) / 100) : 0;
   lhCart.set(domain, { price: price, priceRaw: priceRaw });
-  lhRenderCart();
+  saveCart(); lhRenderCart();
   log('ok', domain + ' → корзина' + (price ? ' ($'+price.toFixed(2)+')' : ' (цена неизвестна)'));
 }
 
 function lhRemoveFromCart(domain){
   lhCart.delete(domain);
-  lhRenderCart();
+  saveCart(); lhRenderCart();
 }
 
 function lhClearCart(){
   lhCart.clear();
-  lhRenderCart();
+  saveCart(); lhRenderCart();
 }
 
 async function lhBuyCart(){
@@ -1283,7 +1296,24 @@ async function lhBuyCart(){
   let total = 0;
   lhCart.forEach(function(item){ total += item.price; });
   const domains = Array.from(lhCart.keys());
-  const cartBuyOk = await uiConfirm('Домены:\n' + domains.join('\n') + '\n\nИтого: $' + total.toFixed(2), 'Купить ' + lhCart.size + ' доменов?', {icon:'🛒',okText:'Купить'});
+  const domainListHtml = domains.map(function(d){
+    const item = lhCart.get(d);
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="color:var(--blue);font-weight:500">'+d+'</span>'
+      + '<span style="color:var(--accent);font-weight:700">$'+(item?item.price.toFixed(2):'?')+'</span>'
+      + '</div>';
+  }).join('');
+  const cartBuyOk = await uiModal({
+    type:'confirm', icon:'🛒',
+    title: 'Купить ' + lhCart.size + ' доменов?',
+    body: '<div style="margin-bottom:10px;font-size:11px;color:var(--text3)">Список доменов:</div>'
+      + domainListHtml
+      + '<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid var(--border2)">'
+      + '<span style="color:var(--text2);font-size:13px">Итого:</span>'
+      + '<span style="color:var(--green);font-weight:700;font-size:15px;font-family:var(--sans)">$'+total.toFixed(2)+'</span>'
+      + '</div>',
+    html: true, okText:'Купить', danger: false
+  });
   if(!cartBuyOk) return;
   log('info', 'Начинаю покупку ' + lhCart.size + ' доменов...');
   const toProcess = new Map(lhCart);
