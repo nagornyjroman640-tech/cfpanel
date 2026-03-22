@@ -562,7 +562,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
             <span class="card-meta" id="lh-domains-cnt">—</span>
             <button class="btn btn-sm" style="margin-left:8px" onclick="lhGetDomains()">🔄 Обновить</button>
           </div>
-          <div class="card-body" style="padding:10px 12px;max-height:320px;overflow-y:auto">
+          <div class="card-body" style="padding:10px 12px;max-height:600px;overflow-y:auto">
             <div id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
           </div>
         </div>
@@ -582,6 +582,7 @@ let unsub={};
 let expandedDomains=new Set(), selectedDomains=new Set();
 
 let lhDomains=[];
+let lhExpandedDomains=new Set();
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
 
 const PAGES={
@@ -1334,6 +1335,10 @@ async function lhBuyCart(){
     okText:'Купить'
   });
   if(!cartBuyOk) return;
+
+  // Refresh balance before buying
+  await lhGetBalance();
+
   log('info', 'Начинаю покупку ' + lhCart.size + ' доменов...');
   // Snapshot cart BEFORE processing - do NOT clear cart yet
   const toProcess = new Map(lhCart);
@@ -1403,7 +1408,7 @@ async function lhSearch(){
     // actualPrice is in cents
     const rawPrice = d.actualPrice || d.prices && d.prices['1'] || 0;
     const priceDisplay = rawPrice ? '$'+(rawPrice/100).toFixed(2) : '';
-    const renewDisplay = d.renewalPrice ? '$'+(d.renewalPrice/100).toFixed(2)+'/год' : '';
+    const renewDisplay = d.renewalPrice ? '$'+(d.renewalPrice/100).toFixed(2)+'/прод.' : '';
 
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg'+(avail?'3':'4')+');border:1px solid var(--border);border-radius:6px;font-size:12px">';
     html += '<span style="flex:1;color:var(--blue);font-weight:500">'+domain+'</span>';
@@ -1477,29 +1482,48 @@ async function lhBuyOne(domain){
   }
   log('info', '['+domain+'] Покупка...');
   const data = await lhReq('POST', '/public/api/domains/purchase', { domain: domain });
-  if(data && !data.error && !data.message){
-    log('ok', '['+domain+'] Куплен! Запускаем автоматику...');
-    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
-    return true;
-  } else {
-    const rawErr = data ? (data.error || data.message || data.msg || JSON.stringify(data)) : 'нет ответа';
-    let errMsg = rawErr;
-    // Parse common error messages
-    const errLow = String(rawErr).toLowerCase();
-    if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
-      errMsg = 'Недостаточно средств на балансе. Пополните на luxhost.cc/wallet';
-    } else if(errLow.includes('already') || errLow.includes('exist')){
-      errMsg = 'Домен уже зарегистрирован';
-    } else if(errLow.includes('invalid') || errLow.includes('bad request')){
-      errMsg = 'Некорректный запрос';
-    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('key')){
-      errMsg = 'Ошибка авторизации — проверьте API токен';
-    }
-    log('err', '['+domain+'] '+errMsg+' (raw: '+String(rawErr).slice(0,80)+')');
-    // Show error immediately for balance issues
-    // Don't show per-domain popup, handled in summary
+
+  // Log full response for debugging
+  log('info', '['+domain+'] API ответ: ' + JSON.stringify(data).slice(0, 300));
+
+  if(!data){
+    log('err', '['+domain+'] Нет ответа от сервера');
     return false;
   }
+
+  // Success check — API may return domain data with id, or success:true, or just no error field
+  const hasId = data.id || data.domainId || data.domain_id;
+  const hasError = data.error || data.statusCode >= 400;
+  const hasMessage = data.message && !hasId;
+
+  if(hasId && !hasError){
+    log('ok', '['+domain+'] Куплен! (ID: '+(data.id||data.domainId||data.domain_id)+') Запускаем автоматику...');
+    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+    return true;
+  }
+
+  // If response has message but also has id — it might be success with info
+  if(hasId && data.message){
+    log('ok', '['+domain+'] Куплен с сообщением: '+data.message);
+    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+    return true;
+  }
+
+  // Error handling
+  const rawErr = data.error || data.message || data.msg || JSON.stringify(data);
+  let errMsg = rawErr;
+  const errLow = String(rawErr).toLowerCase();
+  if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
+    errMsg = 'Недостаточно средств на балансе. Пополните на luxhost.cc/wallet';
+  } else if(errLow.includes('already') || errLow.includes('exist')){
+    errMsg = 'Домен уже зарегистрирован';
+  } else if(errLow.includes('invalid') || errLow.includes('bad request')){
+    errMsg = 'Некорректный запрос';
+  } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('key')){
+    errMsg = 'Ошибка авторизации — проверьте API токен';
+  }
+  log('err', '['+domain+'] '+errMsg+' (raw: '+String(rawErr).slice(0,150)+')');
+  return false;
 }
 
 // ── AUTO SETUP (buy → CF zone → DNS → NS change) ──
@@ -1570,30 +1594,255 @@ async function lhGetDomains(){
 
   lhDomains = items;
   document.getElementById('lh-domains-cnt').textContent = items.length + ' доменов';
-  const list = document.getElementById('lh-domains-list');
+  lhRenderDomains();
+  log('ok', 'Загружено: '+items.length+' доменов');
+}
 
+function lhRenderDomains(){
+  const list = document.getElementById('lh-domains-list');
+  const items = lhDomains;
   if(!items.length){
     list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>';
     return;
   }
-
   let html = '';
   items.forEach(function(d){
     const name = d.domain || d.name || d.id;
     const exp = d.expiresAt || d.expiry || d.expired_at || d.expiration || '';
-    const ns = d.nameservers ? d.nameservers.join(', ') : (d.ns ? d.ns.join(', ') : '—');
+    const ns = d.nameservers || d.ns || [];
+    const nsStr = ns.length ? ns.join(', ') : '—';
     const domId = d.id || d.domainId || d.domain_id || '';
+    const isExpanded = lhExpandedDomains.has(domId);
+    const hasNs = ns.length > 0;
+    const isCfNs = hasNs && nsStr.toLowerCase().includes('cloudflare');
+    const records = d.records || d.dns_records || [];
 
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:4px">';
-    html += '<span style="flex:1;color:var(--blue);font-weight:500">'+name+'</span>';
+    html += '<div class="d-row" style="margin-bottom:4px">';
+    // Header
+    html += '<div class="d-row-head" onclick="lhToggleExpand(\''+domId+'\')">';
+    html += '<span class="d-name">'+name+'</span>';
     if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
-    html += '<span style="font-size:10px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+ns+'">'+ns+'</span>';
-    html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
+    if(isCfNs) html += '<span style="font-size:10px;color:var(--accent);background:rgba(246,130,31,.12);padding:1px 6px;border-radius:3px;border:1px solid rgba(246,130,31,.25)">☁ CF</span>';
+    else if(hasNs) html += '<span style="font-size:10px;color:var(--blue);background:rgba(91,164,255,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(91,164,255,.2)">NS</span>';
+    html += '<span class="d-expand'+(isExpanded?' open':'')+'">▶</span>';
+    html += '</div>';
+
+    // Expanded panel
+    if(isExpanded){
+      html += '<div class="d-records open" style="display:block">';
+
+      // NS Section
+      html += '<div style="margin-bottom:10px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+      html += '<span style="font-size:11px;color:var(--text2);font-weight:600">Nameservers</span>';
+      html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')">✏️ Изменить NS</button>';
+      html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
+      html += '<button class="btn btn-sm btn-danger" onclick="lhClearNs(\''+domId+'\',\''+name+'\')">✕ Сбросить NS</button>';
+      html += '</div>';
+      if(hasNs){
+        html += '<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--blue)">';
+        ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">NS не установлены (используются записи регистратора)</div>';
+      }
+      html += '</div>';
+
+      // DNS Records Section
+      html += '<div style="border-top:1px solid var(--border);padding-top:10px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+      html += '<span style="font-size:11px;color:var(--text2);font-weight:600">DNS записи</span>';
+      if(hasNs) html += '<span style="font-size:10px;color:var(--yellow);background:rgba(255,211,42,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(255,211,42,.2)">⚠ NS установлены — записи ниже не активны</span>';
+      html += '<button class="btn btn-sm btn-primary" onclick="lhAddRecord(\''+domId+'\',\''+name+'\')">+ Запись</button>';
+      html += '<button class="btn btn-sm" onclick="lhLoadRecords(\''+domId+'\')">🔄</button>';
+      html += '</div>';
+
+      // Records loading placeholder
+      html += '<div id="lh-recs-'+domId+'"'+(hasNs?' style="opacity:.4;pointer-events:none"':'')+' >';
+      if(records.length){
+        html += lhRenderRecordsTable(records, domId, name);
+      } else {
+        html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">Записи не загружены. Нажмите 🔄 для загрузки.</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+
+      html += '</div>';
+    }
     html += '</div>';
   });
-
   list.innerHTML = html;
-  log('ok', 'Загружено: '+items.length+' доменов');
+}
+
+function lhRenderRecordsTable(records, domId, domName){
+  if(!records.length) return '<div style="font-size:11px;color:var(--text3);padding:6px 0">Нет записей</div>';
+  let html = '<table class="dns-tbl"><thead><tr><th>Тип</th><th>Имя</th><th>Значение</th><th>TTL</th><th></th></tr></thead><tbody>';
+  records.forEach(function(r, i){
+    const type = r.type || '';
+    const rName = r.host || r.name || '@';
+    const value = r.value || r.content || r.data || '';
+    const ttl = r.ttl || 'Авто';
+    html += '<tr>';
+    html += '<td><span class="type-tag">'+type+'</span></td>';
+    html += '<td style="color:var(--blue)">'+rName+'</td>';
+    html += '<td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+value+'">'+value+'</td>';
+    html += '<td style="color:var(--text3)">'+(ttl===1?'Авто':ttl)+'</td>';
+    html += '<td style="white-space:nowrap">';
+    html += '<span style="cursor:pointer;color:var(--text3);padding:2px 5px;border-radius:4px;font-size:12px" onclick="lhEditRecord(\''+domId+'\',\''+domName+'\','+i+')" title="Редактировать">✏️</span>';
+    html += '<span class="del-btn" onclick="lhDeleteRecord(\''+domId+'\',\''+domName+'\','+i+')" title="Удалить">✕</span>';
+    html += '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function lhToggleExpand(domId){
+  if(lhExpandedDomains.has(domId)) lhExpandedDomains.delete(domId);
+  else lhExpandedDomains.add(domId);
+  lhRenderDomains();
+}
+
+async function lhLoadRecords(domId){
+  log('info', 'Загрузка записей домена '+domId+'...');
+  const el = document.getElementById('lh-recs-'+domId);
+  if(el) el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px">⟳ Загрузка...</div>';
+
+  const data = await lhReq('GET', '/public/api/domains/'+domId+'/records');
+  let records = [];
+  if(Array.isArray(data)) records = data;
+  else if(data && data.records) records = data.records;
+  else if(data && data.data) records = data.data;
+
+  // Update cached domain records
+  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+  if(dom) dom.records = records;
+  const domName = dom ? (dom.domain||dom.name||domId) : domId;
+
+  if(el){
+    if(records.length){
+      el.innerHTML = lhRenderRecordsTable(records, domId, domName);
+    } else {
+      el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:6px 0">Нет записей</div>';
+    }
+  }
+  log('ok', 'Записей: '+records.length);
+}
+
+async function lhAddRecord(domId, domName){
+  const type = prompt('Тип записи (A/AAAA/CNAME/MX/TXT):', 'A');
+  if(!type) return;
+  const host = prompt('Имя (@ для корня, или субдомен):', '@');
+  if(host === null) return;
+  const value = prompt('Значение (IP или адрес):');
+  if(!value) return;
+  const ttl = parseInt(prompt('TTL (0=Авто):', '0')) || 0;
+
+  log('info', '['+domName+'] Добавляю '+type+' '+host+' → '+value);
+  const data = await lhReq('POST', '/public/api/domains/setrecord', {
+    domainId: domId,
+    type: type.toUpperCase(),
+    host: host || '@',
+    value: value,
+    ttl: ttl
+  });
+
+  if(data && !data.error){
+    log('ok', '['+domName+'] Запись добавлена');
+    await lhLoadRecords(domId);
+  } else {
+    log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
+    await uiError(data ? (data.error||data.message||'Ошибка') : 'Нет ответа', 'Ошибка добавления');
+  }
+}
+
+async function lhEditRecord(domId, domName, recIdx){
+  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+  if(!dom || !dom.records || !dom.records[recIdx]) return;
+  const r = dom.records[recIdx];
+  const recId = r.id || r.recordId || r.record_id || '';
+
+  const type = prompt('Тип:', r.type);
+  if(!type) return;
+  const host = prompt('Имя:', r.host || r.name || '@');
+  if(host === null) return;
+  const value = prompt('Значение:', r.value || r.content || r.data || '');
+  if(!value) return;
+  const ttl = parseInt(prompt('TTL (0=Авто):', r.ttl || 0)) || 0;
+
+  log('info', '['+domName+'] Редактирую запись...');
+  const data = await lhReq('POST', '/public/api/domains/editrecord', {
+    domainId: domId,
+    recordId: recId,
+    type: type.toUpperCase(),
+    host: host || '@',
+    value: value,
+    ttl: ttl
+  });
+
+  if(data && !data.error){
+    log('ok', '['+domName+'] Запись обновлена');
+    await lhLoadRecords(domId);
+  } else {
+    log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
+  }
+}
+
+async function lhDeleteRecord(domId, domName, recIdx){
+  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+  if(!dom || !dom.records || !dom.records[recIdx]) return;
+  const r = dom.records[recIdx];
+  const recId = r.id || r.recordId || r.record_id || '';
+  const delOk = await uiConfirm('Удалить запись '+r.type+' '+(r.host||r.name||'@')+' → '+(r.value||r.content||'')+'?', 'Удалить запись?', {danger:true, okText:'Удалить'});
+  if(!delOk) return;
+
+  log('info', '['+domName+'] Удаляю запись...');
+  const data = await lhReq('POST', '/public/api/domains/deleterecord', {
+    domainId: domId,
+    recordId: recId
+  });
+
+  if(data && !data.error){
+    log('ok', '['+domName+'] Запись удалена');
+    await lhLoadRecords(domId);
+  } else {
+    log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
+  }
+}
+
+async function lhEditNs(domId, domName){
+  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+  const currentNs = dom && (dom.nameservers || dom.ns) ? (dom.nameservers || dom.ns).join('\n') : '';
+  const input = prompt('Nameservers (по одному на строку):', currentNs);
+  if(input === null) return;
+  const nsArr = input.split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+  if(!nsArr.length){ await uiWarn('Введите хотя бы один NS сервер', 'Пусто'); return; }
+
+  log('info', '['+domName+'] Меняем NS → '+nsArr.join(', '));
+  const data = await lhReq('POST', '/public/api/domains/'+domId+'/change-ns', { nameservers: nsArr });
+  if(data && !data.error){
+    log('ok', '['+domName+'] NS обновлены ✓');
+    await uiSuccess('NS обновлены: '+nsArr.join(', '), 'NS изменены');
+    await lhGetDomains();
+  } else {
+    log('err', '['+domName+'] NS ошибка: '+(data ? (data.error||data.message||'?') : '?'));
+    await uiError(data ? (data.error||data.message||'Ошибка') : 'Нет ответа', 'Ошибка NS');
+  }
+}
+
+async function lhClearNs(domId, domName){
+  const clrOk = await uiConfirm('Nameservers будут сброшены. Записи домена станут активными.', 'Сбросить NS для '+domName+'?', {danger:true, okText:'Сбросить'});
+  if(!clrOk) return;
+
+  log('info', '['+domName+'] Сброс NS...');
+  const data = await lhReq('POST', '/public/api/domains/setDNS', { domainId: domId });
+  if(data && !data.error){
+    log('ok', '['+domName+'] NS сброшены — используются записи регистратора');
+    await uiSuccess('NS сброшены. Теперь DNS записи активны.', 'NS сброшены');
+    await lhGetDomains();
+  } else {
+    log('err', '['+domName+'] Ошибка сброса: '+(data ? (data.error||data.message||JSON.stringify(data)) : '?'));
+  }
 }
 
 async function lhSetCfNs(domainId, domain){
