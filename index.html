@@ -472,10 +472,25 @@ nav{flex:1;padding:8px;overflow-y:auto}
         <div class="card">
           <div class="card-head"><span>🛒</span><span class="card-title">LuxHost API</span></div>
           <div class="card-body">
-            <div class="field"><label class="field-label">API Token</label><div class="tok-wrap"><input type="password" id="lh-token" placeholder="LuxHost API Token"><span class="eye" onclick="toggleEye('lh-token',this)">👁</span></div><div class="field-hint">LuxHost → Личный кабинет → API</div></div>
+            <div class="field"><label class="field-label">API Token</label><div class="tok-wrap"><input type="password" id="lh-token" placeholder="LuxHost API Token"><span class="eye" onclick="toggleEye('lh-token',this)">👁</span></div><div class="field-hint">LuxHost → Личный кабинет → API (для доменов, баланса, поиска)</div></div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn btn-primary" onclick="saveLhToken()">💾 Сохранить</button>
               <button class="btn" onclick="lhGetBalance()">🔌 Проверить</button>
+            </div>
+            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">🔐 Авторизация для пополнения баланса</div>
+              <div class="info-box" style="margin-bottom:10px"><span>ℹ️</span><span>Для создания счетов на пополнение требуется JWT токен. Введите email/пароль от LuxHost и нажмите «Войти», или вставьте JWT токен вручную.</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label class="field-label">Email LuxHost</label><input type="email" id="lh-email" placeholder="your@email.com"></div>
+                <div class="field"><label class="field-label">Пароль LuxHost</label><div class="tok-wrap"><input type="password" id="lh-pass" placeholder="••••••••"><span class="eye" onclick="toggleEye('lh-pass',this)">👁</span></div></div>
+              </div>
+              <button class="btn btn-primary" onclick="lhLogin()" style="margin-bottom:10px">🔑 Войти и получить JWT</button>
+              <div class="field" style="margin-top:4px"><label class="field-label">JWT Token <span style="font-size:10px;color:var(--text3)">(или вставьте вручную)</span></label><div class="tok-wrap"><input type="password" id="lh-jwt" placeholder="eyJhbGciOiJIUz..."><span class="eye" onclick="toggleEye('lh-jwt',this)">👁</span></div></div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn" onclick="saveLhJwt()">💾 Сохранить JWT</button>
+                <button class="btn" onclick="testLhJwt()">🔌 Проверить JWT</button>
+              </div>
+              <div style="font-size:10px;color:var(--text3);margin-top:6px" id="lh-jwt-status"></div>
             </div>
           </div>
         </div>
@@ -712,7 +727,10 @@ function loadCF(){
     if(doc.exists){ cfCfg=doc.data(); document.getElementById('cf-tok').value=cfCfg.token||''; document.getElementById('cf-acc').value=cfCfg.account||''; setDot(!!cfCfg.token); }
   });
   db.collection('settings').doc('luxhost').get().then(doc=>{
-    if(doc.exists && doc.data().token){ document.getElementById('lh-token').value=doc.data().token; }
+    if(doc.exists){
+      if(doc.data().token) document.getElementById('lh-token').value=doc.data().token;
+      if(doc.data().jwt) document.getElementById('lh-jwt').value=doc.data().jwt;
+    }
   });
 }
 
@@ -1093,6 +1111,97 @@ async function saveLhToken(){
   const token=v('lh-token');
   await db.collection('settings').doc('luxhost').set({token,updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
   log('ok','LuxHost токен сохранён');await uiSuccess('LuxHost API Token сохранён.', 'Сохранено');
+}
+
+// ── LuxHost JWT Auth (for payments) ──
+async function lhLogin(){
+  const email = v('lh-email');
+  const pass = document.getElementById('lh-pass').value;
+  if(!email || !pass){ await uiWarn('Введите email и пароль от LuxHost', 'Заполните поля'); return; }
+
+  log('info', 'LuxHost авторизация...');
+  try{
+    const res = await fetch(PROXY_URL + '/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Target': 'luxhost',
+        'X-API-Key': 'auth-login'
+      },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+    log('info', 'Login response: ' + JSON.stringify(data).slice(0, 300));
+
+    if(data.token || data.access_token || (data.user && data.user.token)){
+      const jwt = data.token || data.access_token || data.user.token;
+      document.getElementById('lh-jwt').value = jwt;
+      await saveLhJwt();
+      log('ok', 'JWT получен! Длина: ' + jwt.length);
+      await uiSuccess('Авторизация успешна! JWT токен сохранён.', 'Успех');
+    } else if(data.error || data.message){
+      log('err', 'Login ошибка: ' + (data.error || data.message));
+      await uiError(data.error || data.message, 'Ошибка входа');
+    } else {
+      // Maybe the response IS the user object with token inside
+      const raw = JSON.stringify(data);
+      const match = raw.match(/"token"\s*:\s*"(eyJ[^"]+)"/);
+      if(match){
+        document.getElementById('lh-jwt').value = match[1];
+        await saveLhJwt();
+        log('ok', 'JWT извлечён из ответа!');
+        await uiSuccess('JWT токен получен и сохранён.', 'Успех');
+      } else {
+        log('warn', 'JWT не найден в ответе. Ключи: ' + Object.keys(data).join(', '));
+        await uiWarn('Не удалось получить JWT. Попробуйте вставить токен вручную (скопируйте из Local Storage на luxhost.cc).', 'JWT не найден');
+      }
+    }
+  }catch(e){
+    log('err', 'Login ошибка: ' + e.message);
+    await uiError('Ошибка: ' + e.message, 'Ошибка авторизации');
+  }
+}
+
+async function saveLhJwt(){
+  const jwt = v('lh-jwt');
+  if(!jwt){ await uiWarn('Введите JWT токен', 'Пусто'); return; }
+  await db.collection('settings').doc('luxhost').set({jwt,jwtUpdatedBy:user.email,jwtUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  document.getElementById('lh-jwt-status').innerHTML = '<span style="color:var(--green)">✓ JWT сохранён (' + new Date().toLocaleTimeString('ru') + ')</span>';
+  log('ok','LuxHost JWT сохранён');
+}
+
+async function testLhJwt(){
+  const jwt = v('lh-jwt');
+  if(!jwt){ await uiWarn('Введите JWT токен', 'Нет JWT'); return; }
+  log('info', 'Проверка JWT...');
+  try{
+    const res = await fetch(PROXY_URL + '/api/v2/payments/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Target': 'luxhost',
+        'X-API-Key': jwt,
+        'X-Auth-Type': 'bearer'
+      },
+      body: JSON.stringify({amount: 500, currency: 'usdt', network: 'tron', paymentStrategy: 'crypto'})
+    });
+    const data = await res.json();
+    if(data.id){
+      log('ok', 'JWT работает! Тестовый инвойс создан: ' + data.id);
+      document.getElementById('lh-jwt-status').innerHTML = '<span style="color:var(--green)">✓ JWT действителен</span>';
+      await uiSuccess('JWT токен работает! Тестовый счёт на $5 создан (ID: '+data.id.slice(0,12)+'...).', 'JWT работает');
+    } else {
+      log('err', 'JWT тест: ' + JSON.stringify(data).slice(0,200));
+      document.getElementById('lh-jwt-status').innerHTML = '<span style="color:var(--red)">✗ JWT не работает</span>';
+      await uiError(data.message || data.error || 'JWT не принят', 'JWT невалиден');
+    }
+  }catch(e){
+    log('err', 'JWT тест ошибка: ' + e.message);
+  }
+}
+
+function getLhJwt(){
+  return document.getElementById('lh-jwt') ? document.getElementById('lh-jwt').value.trim() : '';
 }
 
 async function testAPI(){
@@ -1655,8 +1764,14 @@ async function lhSetCfNs(domainId, domain){
 
 // ── INVOICE ──
 async function lhCreateInvoice(){
-  const token = getLhToken();
-  if(!token){ await uiWarn('Перейдите в Настройки и введите LuxHost API Token.', 'Токен не настроен'); return; }
+  const jwt = getLhJwt();
+  if(!jwt){
+    await uiWarn(
+      'Для создания счёта нужен JWT токен.<br><br>Перейдите в <b>Настройки → LuxHost API → Авторизация для пополнения</b> и:<br>• Войдите через email/пароль, или<br>• Вставьте JWT вручную из Local Storage на luxhost.cc',
+      'JWT не настроен'
+    );
+    return;
+  }
 
   const amount = document.getElementById('lh-topup-amount').value.trim();
   const currency = document.getElementById('lh-topup-currency').value;
@@ -1678,12 +1793,9 @@ async function lhCreateInvoice(){
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">⟳ Создаю счёт...</div>';
 
-  // Split currency selector value: "usdt|tron" → currency="usdt", network="tron"
   const [cur, net] = currency.split('|');
 
-  // LuxHost API: POST /api/v2/payments/create
-  // (confirmed from luxhost.cc website DevTools)
-  // Amount in cents (e.g. $5 = 500), currency & network lowercase
+  // Use JWT Bearer token with /api/v2/payments/create (same as luxhost.cc website)
   const invoiceBody = {
     amount: Math.round(amountNum * 100),
     currency: cur,
@@ -1693,13 +1805,23 @@ async function lhCreateInvoice(){
 
   log('info', 'Отправляю: ' + JSON.stringify(invoiceBody));
 
-  // Use the exact same endpoint as luxhost.cc website
-  let data = await lhReq('POST', '/api/v2/payments/create', invoiceBody);
-
-  // If that fails, try the Swagger documented endpoint
-  if(!data || (data.message && data.message.includes('Missing required')) || data.statusCode === 404){
-    log('info', 'Пробую /public_api/payments/createInvoice...');
-    data = await lhReq('POST', '/public_api/payments/createInvoice', invoiceBody);
+  let data = null;
+  try{
+    const res = await fetch(PROXY_URL + '/api/v2/payments/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Target': 'luxhost',
+        'X-API-Key': jwt
+      },
+      body: JSON.stringify(invoiceBody)
+    });
+    data = await res.json();
+  }catch(e){
+    log('err', 'Ошибка запроса: ' + e.message);
+    result.innerHTML = '';
+    await uiError('Ошибка сети: ' + e.message, 'Ошибка');
+    return;
   }
 
   result.innerHTML = '';
@@ -1711,22 +1833,19 @@ async function lhCreateInvoice(){
 
   log('info', 'createInvoice response: ' + JSON.stringify(data).slice(0, 500));
 
-  // Check for actual errors (NOT "pending" status — that's a success!)
   const isError = data.error || (data.message && !data.id) || data.statusCode >= 400 || data.success === false;
   if(isError){
     const errRaw = data.error || data.message || data.detail || JSON.stringify(data);
     const errLow = String(errRaw).toLowerCase();
     let friendly = 'Не удалось создать счёт. Попробуйте снова.';
-    if(errLow.includes('missing required')){
-      friendly = 'Сервер не принял параметры. Попробуйте другую сумму или валюту.';
-    } else if(errLow.includes('minimum') || errLow.includes('min') || errLow.includes('least')){
+    if(errLow.includes('unauthorized') || errLow.includes('jwt') || errLow.includes('token') || errLow.includes('401')){
+      friendly = 'JWT токен истёк или невалиден. Перейдите в Настройки и обновите JWT (войдите заново или скопируйте из luxhost.cc).';
+    } else if(errLow.includes('missing required')){
+      friendly = 'Сервер не принял параметры.';
+    } else if(errLow.includes('minimum') || errLow.includes('min')){
       friendly = 'Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b>';
-    } else if(errLow.includes('maximum') || errLow.includes('max')){
-      friendly = 'Превышена максимальная сумма пополнения.';
-    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('401') || errLow.includes('unauthorized')){
-      friendly = 'Ошибка авторизации. Проверьте LuxHost API токен в Настройках.';
     } else if(errLow.includes('bad request') || errLow.includes('400')){
-      friendly = 'Некорректный запрос. Проверьте сумму и валюту.';
+      friendly = 'Некорректный запрос.';
     } else if(errRaw.length < 150){
       friendly = errRaw;
     }
@@ -1735,8 +1854,7 @@ async function lhCreateInvoice(){
     return;
   }
 
-  // Success — response format:
-  // {id, amount, status:"pending", expiredAt, metadata:{currency,network,paymentAddress}, type:"invoice"}
+  // Success
   const invoiceId = data.id || '';
   const address   = (data.metadata && data.metadata.paymentAddress) || data.paymentAddress || data.address || '';
   const network   = (data.metadata && data.metadata.network) || net || '';
