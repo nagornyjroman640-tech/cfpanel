@@ -141,10 +141,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .d-checkbox{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .d-name{flex:1;color:var(--blue);font-weight:500;font-size:12px}
 .d-zone{font-size:10px;color:var(--text3)}
-.d-expand{font-size:11px;color:var(--text3);padding:2px 5px;transition:transform .2s}
+.d-expand{font-size:11px;color:var(--text3);padding:2px 5px;transition:transform .25s ease}
 .d-expand.open{transform:rotate(90deg)}
-.d-records{display:none;padding:10px 12px;background:var(--bg);border-top:1px solid var(--border)}
-.d-records.open{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 
 .pill{padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
@@ -224,6 +222,19 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .cfz-status.pending{background:rgba(255,211,42,.12);color:var(--yellow);border:1px solid rgba(255,211,42,.25)}
 .cfz-status.other{background:rgba(136,136,168,.12);color:var(--text2);border:1px solid rgba(136,136,168,.25)}
 .cfz-add-row{display:grid;gap:6px;align-items:end;grid-template-columns:80px 100px 1fr 60px auto auto;border-top:1px solid var(--border);padding-top:10px;margin-top:8px}
+
+/* SMOOTH EXPAND */
+.d-records{max-height:0;overflow:hidden;transition:max-height .35s ease, padding .25s ease;padding:0 12px;background:var(--bg);border-top:0px solid var(--border)}
+.d-records.open{max-height:2000px;padding:10px 12px;border-top:1px solid var(--border)}
+
+/* SELECTABLE DOMAIN NAMES */
+.d-name{user-select:text!important;cursor:text}
+.d-row-head{user-select:none}
+.d-row-head .d-name{user-select:text;cursor:text}
+
+/* LH BULK BAR */
+.lh-bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px;margin-bottom:8px}
+.lh-bulk-bar.show{display:flex}
 
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -614,9 +625,18 @@ nav{flex:1;padding:8px;overflow-y:auto}
           <div class="card-head">
             <span>🌐</span><span class="card-title">Мои домены в LuxHost</span>
             <span class="card-meta" id="lh-domains-cnt">—</span>
-            <button class="btn btn-sm" style="margin-left:8px" onclick="lhGetDomains()">🔄 Обновить</button>
+            <button class="btn btn-sm" style="margin-left:8px" onclick="lhSelectAll()">☑ Все</button>
+            <button class="btn btn-sm" onclick="lhGetDomains()">🔄 Обновить</button>
           </div>
-          <div class="card-body" style="padding:10px 12px;max-height:600px;overflow-y:auto">
+          <div class="card-body" style="padding:10px 12px;max-height:700px;overflow-y:auto">
+            <div class="lh-bulk-bar" id="lh-bulk-bar">
+              <span>Выбрано: <span style="color:var(--accent);font-weight:600" id="lh-bulk-cnt">0</span> доменов</span>
+              <button class="btn btn-sm btn-primary" onclick="lhBulkDeploy()">🚀 Задеплоить в CF</button>
+              <button class="btn btn-sm" onclick="lhBulkCopyNames()">📋 Копировать</button>
+              <button class="btn btn-sm" onclick="lhSelectAll()">☑ Все</button>
+              <button class="btn btn-sm" onclick="lhDeselectAll()">☐ Снять</button>
+              <span style="margin-left:auto;cursor:pointer;color:var(--text3);font-size:13px" onclick="lhDeselectAll()">✕</span>
+            </div>
             <div id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
           </div>
         </div>
@@ -637,6 +657,7 @@ let expandedDomains=new Set(), selectedDomains=new Set();
 
 let lhDomains=[];
 let lhExpandedDomains=new Set();
+let lhSelectedDomains=new Set();
 let cfZones=[], cfZoneRecs={}, cfExpandedZones=new Set();
 let domainComments={};
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
@@ -1762,6 +1783,7 @@ function lhRenderDomains(){
   const items = lhDomains;
   if(!items.length){
     list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>';
+    lhUpdateBulkBar();
     return;
   }
   let html = '';
@@ -1772,15 +1794,17 @@ function lhRenderDomains(){
     const nsStr = ns.length ? ns.join(', ') : '—';
     const domId = d.id || d.domainId || d.domain_id || '';
     const isExpanded = lhExpandedDomains.has(domId);
+    const isSelected = lhSelectedDomains.has(domId);
     const hasNs = ns.length > 0;
     const isCfNs = hasNs && nsStr.toLowerCase().includes('cloudflare');
     const records = d.records || d.dns_records || [];
-
-    html += '<div class="d-row" style="margin-bottom:4px">';
-    // Header
     var lhCmt = domainComments[name] || '';
+
+    html += '<div class="d-row'+(isSelected?' selected':'')+'" style="margin-bottom:4px">';
+    // Header
     html += '<div class="d-row-head" onclick="lhToggleExpand(\''+domId+'\')">';
-    html += '<span class="d-name">'+name+'</span>';
+    html += '<input type="checkbox" class="d-checkbox" '+(isSelected?'checked':'')+' onclick="event.stopPropagation();lhToggleSelect(\''+domId+'\')">';
+    html += '<span class="d-name" onclick="event.stopPropagation()">'+name+'</span>';
     if(lhCmt) html += '<span style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+lhCmt.replace(/"/g,'&quot;')+'">💬 '+lhCmt+'</span>';
     if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
     if(isCfNs) html += '<span style="font-size:10px;color:var(--accent);background:rgba(246,130,31,.12);padding:1px 6px;border-radius:3px;border:1px solid rgba(246,130,31,.25)">☁ CF</span>';
@@ -1788,60 +1812,58 @@ function lhRenderDomains(){
     html += '<span class="d-expand'+(isExpanded?' open':'')+'">▶</span>';
     html += '</div>';
 
-    // Expanded panel
-    if(isExpanded){
-      html += '<div class="d-records open" style="display:block">';
+    // Expanded panel (always rendered, visibility controlled by CSS class)
+    html += '<div class="d-records'+(isExpanded?' open':'')+'">';
 
-      // NS Section
-      html += '<div style="margin-bottom:10px">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-      html += '<span style="font-size:11px;color:var(--text2);font-weight:600">Nameservers</span>';
-      html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')">✏️ Изменить NS</button>';
-      html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
-      html += '<button class="btn btn-sm btn-danger" onclick="lhClearNs(\''+domId+'\',\''+name+'\')">✕ Сбросить NS</button>';
+    // NS Section
+    html += '<div style="margin-bottom:10px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html += '<span style="font-size:11px;color:var(--text2);font-weight:600">Nameservers</span>';
+    html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')">✏️ Изменить NS</button>';
+    html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
+    html += '<button class="btn btn-sm btn-danger" onclick="lhClearNs(\''+domId+'\',\''+name+'\')">✕ Сбросить NS</button>';
+    html += '</div>';
+    if(hasNs){
+      html += '<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--blue)">';
+      ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
       html += '</div>';
-      if(hasNs){
-        html += '<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--blue)">';
-        ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
-        html += '</div>';
-      } else {
-        html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">NS не установлены (используются записи регистратора)</div>';
-      }
-      html += '</div>';
-
-      // DNS Records Section
-      html += '<div style="border-top:1px solid var(--border);padding-top:10px">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-      html += '<span style="font-size:11px;color:var(--text2);font-weight:600">DNS записи</span>';
-      if(hasNs) html += '<span style="font-size:10px;color:var(--yellow);background:rgba(255,211,42,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(255,211,42,.2)">⚠ NS установлены — записи ниже не активны</span>';
-      html += '<button class="btn btn-sm btn-primary" onclick="lhAddRecord(\''+domId+'\',\''+name+'\')">+ Запись</button>';
-      html += '<button class="btn btn-sm" onclick="lhLoadRecords(\''+domId+'\')">🔄</button>';
-      html += '</div>';
-
-      // Records loading placeholder
-      html += '<div id="lh-recs-'+domId+'"'+(hasNs?' style="opacity:.4;pointer-events:none"':'')+' >';
-      if(records.length){
-        html += lhRenderRecordsTable(records, domId, name);
-      } else {
-        html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">Записи не загружены. Нажмите 🔄 для загрузки.</div>';
-      }
-      html += '</div>';
-      html += '</div>';
-
-      // Comment section for LuxHost domain
-      var lhComment = domainComments[name] || '';
-      html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">';
-      html += '<div class="dom-comment" onclick="editComment(\''+name+'\')">';
-      html += '<span class="dom-comment-icon">💬</span>';
-      html += '<span class="dom-comment-text'+(lhComment?'':' empty')+'">'+(lhComment || 'Добавить комментарий...')+'</span>';
-      html += '<span class="dom-comment-edit">✏️</span>';
-      html += '</div></div>';
-
-      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">NS не установлены (используются записи регистратора)</div>';
     }
     html += '</div>';
+
+    // DNS Records Section
+    html += '<div style="border-top:1px solid var(--border);padding-top:10px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html += '<span style="font-size:11px;color:var(--text2);font-weight:600">DNS записи</span>';
+    if(hasNs) html += '<span style="font-size:10px;color:var(--yellow);background:rgba(255,211,42,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(255,211,42,.2)">⚠ NS установлены — записи ниже не активны</span>';
+    html += '<button class="btn btn-sm btn-primary" onclick="lhAddRecord(\''+domId+'\',\''+name+'\')">+ Запись</button>';
+    html += '<button class="btn btn-sm" onclick="lhLoadRecords(\''+domId+'\')">🔄</button>';
+    html += '</div>';
+
+    // Records
+    html += '<div id="lh-recs-'+domId+'"'+(hasNs?' style="opacity:.4;pointer-events:none"':'')+' >';
+    if(records.length){
+      html += lhRenderRecordsTable(records, domId, name);
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">Записи не загружены. Нажмите 🔄 для загрузки.</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Comment section
+    html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">';
+    html += '<div class="dom-comment" onclick="editComment(\''+name+'\')">';
+    html += '<span class="dom-comment-icon">💬</span>';
+    html += '<span class="dom-comment-text'+(lhCmt?'':' empty')+'">'+(lhCmt || 'Добавить комментарий...')+'</span>';
+    html += '<span class="dom-comment-edit">✏️</span>';
+    html += '</div></div>';
+
+    html += '</div>'; // d-records
+    html += '</div>'; // d-row
   });
   list.innerHTML = html;
+  lhUpdateBulkBar();
 }
 
 function lhRenderRecordsTable(records, domId, domName){
@@ -1871,6 +1893,131 @@ function lhToggleExpand(domId){
   if(lhExpandedDomains.has(domId)) lhExpandedDomains.delete(domId);
   else lhExpandedDomains.add(domId);
   lhRenderDomains();
+}
+
+function lhToggleSelect(domId){
+  if(lhSelectedDomains.has(domId)) lhSelectedDomains.delete(domId);
+  else lhSelectedDomains.add(domId);
+  lhRenderDomains();
+}
+
+function lhSelectAll(){
+  lhDomains.forEach(function(d){
+    var id = d.id || d.domainId || d.domain_id || '';
+    if(id) lhSelectedDomains.add(id);
+  });
+  lhRenderDomains();
+}
+
+function lhDeselectAll(){
+  lhSelectedDomains.clear();
+  lhRenderDomains();
+}
+
+function lhUpdateBulkBar(){
+  var bar = document.getElementById('lh-bulk-bar');
+  if(!bar) return;
+  var cnt = lhSelectedDomains.size;
+  document.getElementById('lh-bulk-cnt').textContent = cnt;
+  bar.classList.toggle('show', cnt > 0);
+}
+
+function lhBulkCopyNames(){
+  var names = [];
+  lhSelectedDomains.forEach(function(id){
+    var d = lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id) === id; });
+    if(d) names.push(d.domain || d.name || '');
+  });
+  navigator.clipboard.writeText(names.join('\n')).then(function(){
+    log('ok', 'Скопировано '+names.length+' доменов');
+  });
+}
+
+async function lhBulkDeploy(){
+  if(!lhSelectedDomains.size){ await uiWarn('Выберите домены галочками','Ничего не выбрано'); return; }
+  var cfToken = v('cf-tok'), cfAccount = v('cf-acc');
+  if(!cfToken || !cfAccount){ await uiWarn('Настройте CF API Token и Account ID в разделе «Настройки»','CF не настроен'); go('settings'); return; }
+
+  // Collect selected domains
+  var selected = [];
+  lhSelectedDomains.forEach(function(id){
+    var d = lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id) === id; });
+    if(d) selected.push(d);
+  });
+
+  var confirmOk = await uiConfirm(
+    'Для <b>'+selected.length+'</b> доменов будет выполнено:<br><br>'
+    +'1. Создание зоны в Cloudflare<br>'
+    +'2. Применение DNS записей из шаблона ('+tplRecs.length+' записей)<br>'
+    +'3. Смена NS на Cloudflare<br><br>'
+    +'<span style="font-size:11px;color:var(--text3)">Домены у которых зона уже есть — будут пропущены</span>',
+    'Задеплоить '+selected.length+' доменов?',
+    {icon:'🚀', okText:'Задеплоить'}
+  );
+  if(!confirmOk) return;
+
+  log('info', '▶ Деплой '+selected.length+' доменов в CF...');
+  var done=0, errs=0, skipped=0;
+
+  for(var i=0; i<selected.length; i++){
+    var d = selected[i];
+    var name = d.domain || d.name || '';
+    var domId = d.id || d.domainId || d.domain_id || '';
+    log('info', '['+(i+1)+'/'+selected.length+'] '+name+'...');
+
+    try{
+      // Step 1: Create or find CF zone
+      var zoneId=null, nsServers=null;
+      var listRes = await cfReq(cfToken,'GET','/zones?name='+name);
+      if(listRes.success && listRes.result && listRes.result[0]){
+        zoneId = listRes.result[0].id;
+        nsServers = listRes.result[0].name_servers;
+        log('warn', '['+name+'] Зона уже есть: '+zoneId);
+      } else {
+        var zoneRes = await cfReq(cfToken,'POST','/zones',{name:name, account:{id:cfAccount}, jump_start:false});
+        if(zoneRes.success){
+          zoneId = zoneRes.result.id;
+          nsServers = zoneRes.result.name_servers;
+          log('ok', '['+name+'] Зона создана');
+        } else {
+          var msg = zoneRes.errors?zoneRes.errors[0].message:'ошибка';
+          log('err', '['+name+'] CF: '+msg);
+          errs++; continue;
+        }
+      }
+
+      // Step 2: Apply DNS template
+      if(tplRecs.length && zoneId){
+        for(var j=0; j<tplRecs.length; j++){
+          var rec = tplRecs[j];
+          await cfReq(cfToken,'POST','/zones/'+zoneId+'/dns_records',{
+            type:rec.type, name:rec.name, content:rec.value, ttl:rec.ttl, proxied:rec.proxied
+          });
+        }
+        log('ok', '['+name+'] '+tplRecs.length+' DNS записей применено');
+      }
+
+      // Step 3: Set NS at LuxHost
+      if(domId && nsServers && nsServers.length){
+        var nsOk = await lhChangeNs(domId, name, nsServers);
+        if(nsOk) log('ok', '['+name+'] NS → CF ✓');
+        else log('warn', '['+name+'] NS не удалось обновить');
+      }
+
+      done++;
+    } catch(e){
+      log('err', '['+name+'] '+e.message);
+      errs++;
+    }
+
+    await sleep(800);
+  }
+
+  log('info', '■ Деплой завершён — успешно: '+done+', ошибок: '+errs);
+  if(done>0) await uiSuccess('Задеплоено '+done+' доменов'+(errs?' (ошибок: '+errs+')':''), 'Деплой завершён');
+  if(errs>0 && done===0) await uiError('Не удалось задеплоить ни одного домена. Проверьте логи.', 'Ошибка деплоя');
+  lhDeselectAll();
+  lhGetDomains();
 }
 
 async function lhLoadRecords(domId){
