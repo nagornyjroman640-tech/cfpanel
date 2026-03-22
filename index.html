@@ -1311,6 +1311,20 @@ async function lhBuyCart(){
   let total = 0;
   lhCart.forEach(function(item){ total += item.price; });
   const domains = Array.from(lhCart.keys());
+
+  // Check balance before showing confirm
+  const balText = document.getElementById('lh-balance').textContent.replace('$','').trim();
+  const currentBal = parseFloat(balText) || 0;
+  if(currentBal > 0 && total > currentBal){
+    await uiError(
+      'У вас недостаточный баланс для покупки.<br><br>'
+      + 'Нужно: <b style="color:var(--accent)">$'+total.toFixed(2)+'</b><br>'
+      + 'На балансе: <b style="color:var(--red)">$'+currentBal.toFixed(2)+'</b><br><br>'
+      + 'Пожалуйста пополните ваш счёт.',
+      'Недостаточно средств'
+    );
+    return;
+  }
   const domainListHtml = domains.map(function(d){
     const item = lhCart.get(d);
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
@@ -1635,37 +1649,96 @@ async function lhSetCfNs(domainId, domain){
 
 // ── INVOICE ──
 async function lhCreateInvoice(){
+  const token = getLhToken();
+  if(!token){ await uiWarn('Перейдите в Настройки и введите LuxHost API Token.', 'Токен не настроен'); return; }
+
   const amount = document.getElementById('lh-topup-amount').value.trim();
   const currency = document.getElementById('lh-topup-currency').value;
   const amountNum = parseFloat(amount);
-  if(!amount || amountNum <= 0){ await uiWarn('Введите сумму для пополнения баланса', 'Укажите сумму'); return; }
-  if(amountNum < 5){ await uiWarn('Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b>', 'Слишком маленькая сумма'); return; }
-  log('info', 'Создаём счёт на $'+amount+' ('+currency+')...');
-  const result = document.getElementById('lh-invoice-result');
-  result.innerHTML = '<div style="font-size:11px;color:var(--text3)">Создаю...</div>';
-  const data = await lhReq('POST', '/public/api/payments/createInvoice', { amount: parseFloat(amount), currency: currency });
-  if(!data || data.error || data.message){
-    const errText = data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа';
-    const errLow = String(errText).toLowerCase();
-    let friendlyErr = errText;
-    if(errLow.includes('minimum') || errLow.includes('min')) friendlyErr = 'Минимальная сумма пополнения — $5';
-    else if(errLow.includes('bad request')) friendlyErr = 'Некорректный запрос. Проверьте сумму и попробуйте снова.';
-    else if(errLow.includes('auth') || errLow.includes('token')) friendlyErr = 'Ошибка авторизации. Проверьте API токен.';
-    result.innerHTML = '';
-    await uiError(friendlyErr, 'Ошибка создания счёта');
-    log('err', 'Ошибка счёта: '+errText);
+
+  if(!amount || isNaN(amountNum) || amountNum <= 0){
+    await uiWarn('Введите сумму для пополнения', 'Укажите сумму');
     return;
   }
-  const payUrl = data.pay_url || data.url || data.payUrl || data.link || '';
-  const address = data.address || data.wallet || '';
-  const payAmount = data.pay_amount || data.amount_crypto || '';
-  log('ok', 'Счёт создан!');
-  result.innerHTML = '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px;margin-top:4px">'
-    + '<div style="font-size:11px;color:var(--green);font-weight:600;margin-bottom:6px">✓ Счёт создан</div>'
-    + (payAmount ? '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">К оплате: <span style="color:var(--text)">'+payAmount+' '+currency+'</span></div>' : '')
-    + (address ? '<div style="font-size:10px;color:var(--text3);word-break:break-all;margin-bottom:6px;user-select:all">'+address+'</div>' : '')
-    + (payUrl ? '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:7px;background:var(--accent);color:#000;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none">💳 Перейти к оплате</a>' : '')
-    + '</div>';
+  if(amountNum < 5){
+    await uiWarn(
+      'Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b><br><br>Введите сумму от $5 и выше.',
+      'Слишком маленькая сумма'
+    );
+    return;
+  }
+
+  log('info', 'Создаём счёт на $'+amountNum.toFixed(2)+' ('+currency+')...');
+  const result = document.getElementById('lh-invoice-result');
+  result.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">⟳ Создаю счёт...</div>';
+
+  // Try both dollar and cent amounts
+  const data = await lhReq('POST', '/public/api/payments/createInvoice', {
+    amount: amountNum,
+    currency: currency
+  });
+
+  result.innerHTML = '';
+
+  if(!data){
+    await uiError('Нет ответа от сервера. Проверьте соединение.', 'Ошибка');
+    return;
+  }
+
+  // Check for errors in various formats
+  const hasError = data.error || data.message || data.status === 'error' || data.success === false;
+  if(hasError){
+    const errRaw = data.error || data.message || data.detail || JSON.stringify(data);
+    const errLow = String(errRaw).toLowerCase();
+    let friendly = 'Не удалось создать счёт. Попробуйте снова.';
+    if(errLow.includes('minimum') || errLow.includes('min') || errLow.includes('least')){
+      friendly = 'Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b>';
+    } else if(errLow.includes('maximum') || errLow.includes('max')){
+      friendly = 'Превышена максимальная сумма пополнения.';
+    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('401')){
+      friendly = 'Ошибка авторизации. Проверьте LuxHost API токен.';
+    } else if(errLow.includes('bad request') || errLow.includes('400')){
+      friendly = 'Некорректный запрос. Проверьте сумму и валюту.';
+    } else if(errRaw.length < 100){
+      friendly = errRaw;
+    }
+    log('err', 'Ошибка счёта: '+errRaw);
+    await uiError(friendly, 'Ошибка создания счёта');
+    return;
+  }
+
+  // Success - extract payment details
+  const payUrl    = data.pay_url     || data.url      || data.payUrl   || data.link       || data.payment_url || '';
+  const address   = data.address     || data.wallet   || data.to       || data.pay_address || '';
+  const payAmount = data.pay_amount  || data.amount_crypto || data.crypto_amount || '';
+  const expiry    = data.expires_at  || data.expiry   || data.valid_until || '';
+
+  log('ok', 'Счёт создан! Сумма: '+(payAmount||amountNum)+' '+currency);
+
+  // Show result as modal for better UX
+  let bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px">';
+  bodyHtml += '<div style="padding:10px 12px;background:rgba(62,207,142,.08);border:1px solid rgba(62,207,142,.2);border-radius:8px;font-size:13px;color:var(--green);font-weight:600">✓ Счёт успешно создан</div>';
+  if(payAmount) bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">К оплате:</span><span style="color:var(--accent);font-weight:700">'+payAmount+' '+currency+'</span></div>';
+  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Сумма USD:</span><span style="font-weight:600">$'+amountNum.toFixed(2)+'</span></div>';
+  if(address){
+    bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-top:4px">Адрес кошелька:</div>';
+    bodyHtml += '<div style="font-size:11px;color:var(--text2);word-break:break-all;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;user-select:all;cursor:text">'+address+'</div>';
+  }
+  if(expiry) bodyHtml += '<div style="font-size:11px;color:var(--text3)">Действует до: '+new Date(expiry).toLocaleString('ru')+'</div>';
+  if(payUrl) bodyHtml += '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:10px;background:var(--accent);color:#000;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px">💳 Перейти к оплате</a>';
+  bodyHtml += '</div>';
+
+  await uiModal({
+    type: 'alert',
+    icon: '💳',
+    title: 'Счёт на оплату',
+    body: bodyHtml,
+    okText: 'Закрыть'
+  });
+
+  // Clear amount field after success
+  document.getElementById('lh-topup-amount').value = '';
+  lhGetBalance();
 }
 
 
