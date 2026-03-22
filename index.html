@@ -514,11 +514,11 @@ nav{flex:1;padding:8px;overflow-y:auto}
                 <input type="number" id="lh-topup-amount" placeholder="Сумма в USD" min="5" step="1" style="margin-bottom:4px">
                 <div style="font-size:10px;color:var(--text3);margin-bottom:7px">Минимальная сумма: $5</div>
                 <select id="lh-topup-currency" style="margin-bottom:8px">
-                  <option value="USDT_TRC20">USDT TRC20</option>
-                  <option value="USDT_ERC20">USDT ERC20</option>
-                  <option value="BTC">Bitcoin</option>
-                  <option value="ETH">Ethereum</option>
-                  <option value="LTC">Litecoin</option>
+                  <option value="usdt|tron">USDT TRC20 (TRON)</option>
+                  <option value="usdt|eth">USDT ERC20 (Ethereum)</option>
+                  <option value="btc|btc">Bitcoin (BTC)</option>
+                  <option value="eth|eth">Ethereum (ETH)</option>
+                  <option value="ltc|ltc">Litecoin (LTC)</option>
                 </select>
                 <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="lhCreateInvoice()">💳 Создать счёт</button>
                 <div id="lh-invoice-result" style="margin-top:8px"></div>
@@ -650,6 +650,11 @@ function showApp(){
   subscribeAll(); loadCF();
   loadCart(); lhRenderCart();
   log('ok','Вошёл: '+user.email);
+  // Copy address on click
+  document.addEventListener('click', function(e){
+    const el = e.target.closest('#lh-pay-addr');
+    if(el){ navigator.clipboard.writeText(el.textContent).then(function(){ el.style.borderColor='var(--green)'; setTimeout(function(){ el.style.borderColor=''; }, 2000); }); }
+  });
   // Event delegation for LuxHost dynamic buttons
   document.addEventListener('click', function(e){
     const btn = e.target.closest('[data-act]');
@@ -1672,10 +1677,13 @@ async function lhCreateInvoice(){
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">⟳ Создаю счёт...</div>';
 
-  // LuxHost legacy API - amount in cents
-  const data = await lhReq('POST', '/public_api/payments/createInvoice', {
+  // LuxHost API v2 - amount in cents, split currency|network
+  const [cur, net] = currency.split('|');
+  const data = await lhReq('POST', '/api/v2/payments/create', {
     amount: Math.round(amountNum * 100),
-    currency: currency
+    currency: cur,
+    network: net,
+    paymentStrategy: 'crypto'
   });
 
   result.innerHTML = '';
@@ -1708,24 +1716,30 @@ async function lhCreateInvoice(){
   }
 
   // Success - extract payment details
-  const payUrl    = data.pay_url     || data.url      || data.payUrl   || data.link       || data.payment_url || '';
-  const address   = data.address     || data.wallet   || data.to       || data.pay_address || '';
-  const payAmount = data.pay_amount  || data.amount_crypto || data.crypto_amount || '';
-  const expiry    = data.expires_at  || data.expiry   || data.valid_until || '';
+  // API v2 response format: {id, amount, status, expiredAt, metadata: {paymentAddress, currency, network}, type}
+  const invoiceId = data.id || '';
+  const address   = (data.metadata && data.metadata.paymentAddress) || data.address || '';
+  const network   = (data.metadata && data.metadata.network) || net || '';
+  const payAmount = data.amount ? (data.amount / 100).toFixed(2) : amountNum.toFixed(2);
+  const expiry    = data.expiredAt || data.expires_at || '';
+  const payUrl    = invoiceId ? 'https://luxhost.cc/payment/'+invoiceId : '';
 
   log('ok', 'Счёт создан! Сумма: '+(payAmount||amountNum)+' '+currency);
 
   // Show result as modal for better UX
+  const curLabel = cur ? cur.toUpperCase() : '';
+  const netLabel = network ? ' ('+network.toUpperCase()+')' : '';
   let bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px">';
   bodyHtml += '<div style="padding:10px 12px;background:rgba(62,207,142,.08);border:1px solid rgba(62,207,142,.2);border-radius:8px;font-size:13px;color:var(--green);font-weight:600">✓ Счёт успешно создан</div>';
-  if(payAmount) bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">К оплате:</span><span style="color:var(--accent);font-weight:700">'+payAmount+' '+currency+'</span></div>';
-  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Сумма USD:</span><span style="font-weight:600">$'+amountNum.toFixed(2)+'</span></div>';
+  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Сумма к зачислению:</span><span style="color:var(--accent);font-weight:700">$'+amountNum.toFixed(2)+'</span></div>';
+  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Валюта:</span><span style="font-weight:600">'+curLabel+netLabel+'</span></div>';
   if(address){
-    bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-top:4px">Адрес кошелька:</div>';
-    bodyHtml += '<div style="font-size:11px;color:var(--text2);word-break:break-all;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;user-select:all;cursor:text">'+address+'</div>';
+    bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-top:2px">Адрес для оплаты (нажмите чтобы скопировать):</div>';
+  bodyHtml += '<div id="lh-pay-addr" style="font-size:11px;color:var(--blue);word-break:break-all;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color .2s" title="Нажмите для копирования">'+address+'</div>';
+    bodyHtml += '<div style="font-size:10px;color:var(--text3)">👆 Нажмите на адрес чтобы скопировать</div>';
   }
-  if(expiry) bodyHtml += '<div style="font-size:11px;color:var(--text3)">Действует до: '+new Date(expiry).toLocaleString('ru')+'</div>';
-  if(payUrl) bodyHtml += '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:10px;background:var(--accent);color:#000;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px">💳 Перейти к оплате</a>';
+  if(expiry) bodyHtml += '<div style="font-size:11px;color:var(--text3)">⏰ Действует до: '+new Date(expiry).toLocaleString('ru')+'</div>';
+  if(payUrl) bodyHtml += '<a href="'+payUrl+'" target="_blank" style="display:block;text-align:center;padding:10px;background:var(--accent);color:#000;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px">💳 Открыть страницу оплаты</a>';
   bodyHtml += '</div>';
 
   await uiModal({
