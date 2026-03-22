@@ -1672,9 +1672,9 @@ async function lhCreateInvoice(){
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">⟳ Создаю счёт...</div>';
 
-  // Try both dollar and cent amounts
-  const data = await lhReq('POST', '/public/api/payments/createInvoice', {
-    amount: amountNum,
+  // LuxHost legacy API - amount in cents
+  const data = await lhReq('POST', '/public_api/payments/createInvoice', {
+    amount: Math.round(amountNum * 100),
     currency: currency
   });
 
