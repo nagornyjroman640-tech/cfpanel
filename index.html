@@ -1681,8 +1681,9 @@ async function lhCreateInvoice(){
   // Split currency selector value: "usdt|tron" → currency="usdt", network="tron"
   const [cur, net] = currency.split('|');
 
-  // LuxHost API: POST /public_api/payments/createInvoice
-  // Amount in cents (e.g. $100 = 10000), currency & network lowercase
+  // LuxHost API: POST /api/v2/payments/create
+  // (confirmed from luxhost.cc website DevTools)
+  // Amount in cents (e.g. $5 = 500), currency & network lowercase
   const invoiceBody = {
     amount: Math.round(amountNum * 100),
     currency: cur,
@@ -1690,13 +1691,15 @@ async function lhCreateInvoice(){
     paymentStrategy: 'crypto'
   };
 
-  // Try the documented Swagger path first, fallback to alternative path
-  let data = await lhReq('POST', '/public_api/payments/createInvoice', invoiceBody);
+  log('info', 'Отправляю: ' + JSON.stringify(invoiceBody));
 
-  // If first path returns 404 or "not found", try alternative path
-  if(data && (data.statusCode === 404 || (data.message && String(data.message).toLowerCase().includes('not found')))){
-    log('info', 'Путь /public_api/ не найден, пробую /public/api/...');
-    data = await lhReq('POST', '/public/api/payments/createInvoice', invoiceBody);
+  // Use the exact same endpoint as luxhost.cc website
+  let data = await lhReq('POST', '/api/v2/payments/create', invoiceBody);
+
+  // If that fails, try the Swagger documented endpoint
+  if(!data || (data.message && data.message.includes('Missing required')) || data.statusCode === 404){
+    log('info', 'Пробую /public_api/payments/createInvoice...');
+    data = await lhReq('POST', '/public_api/payments/createInvoice', invoiceBody);
   }
 
   result.innerHTML = '';
