@@ -202,9 +202,9 @@ nav{flex:1;padding:8px;overflow-y:auto}
   <div id="ui-modal" style="width:400px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;animation:slideUp .2s ease;box-shadow:0 20px 60px rgba(0,0,0,.5)">
     <div style="padding:18px 22px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
       <span id="ui-modal-icon" style="font-size:20px">ℹ️</span>
-      <span id="ui-modal-title" style="font-family:var(--sans);font-weight:800;font-size:14px;flex:1"></span>
+      <span id="ui-modal-title" style="font-family:var(--sans);font-weight:700;font-size:15px;flex:1;color:var(--text)"></span>
     </div>
-    <div id="ui-modal-body" style="padding:16px 22px;font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:320px;overflow-y:auto;font-family:var(--mono)"></div>
+    <div id="ui-modal-body" style="padding:16px 22px;font-size:13px;color:var(--text2);line-height:1.7;max-height:320px;overflow-y:auto;font-family:var(--sans)"></div>
     <div id="ui-modal-foot" style="padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end"></div>
   </div>
 </div>
@@ -1298,7 +1298,7 @@ async function lhBuyCart(){
   const domainListHtml = domains.map(function(d){
     const item = lhCart.get(d);
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
-      + '<span style="color:var(--blue);font-weight:600;font-family:var(--mono)">'+d+'</span>'
+      + '<span style="color:var(--blue);font-weight:600;font-family:var(--sans)">'+d+'</span>'
       + '<span style="color:var(--accent);font-weight:700;font-family:var(--sans)">$'+(item?item.price.toFixed(2):'?')+'</span>'
       + '</div>';
   }).join('');
@@ -1315,11 +1315,38 @@ async function lhBuyCart(){
   });
   if(!cartBuyOk) return;
   log('info', 'Начинаю покупку ' + lhCart.size + ' доменов...');
+  // Snapshot cart BEFORE processing - do NOT clear cart yet
   const toProcess = new Map(lhCart);
-  lhClearCart();
+  let successCount = 0, failCount = 0;
+
   for(const [domain] of toProcess){
-    await lhBuyOne(domain);
+    const ok = await lhBuyOne(domain);
+    if(ok){
+      successCount++;
+      lhCart.delete(domain);
+      saveCart();
+      lhRenderCart();
+      log('ok', domain + ' куплен и удалён из корзины');
+    } else {
+      failCount++;
+      log('warn', domain + ' остался в корзине из-за ошибки');
+    }
     await sleep(1200);
+  }
+
+  log('info', 'Итог: куплено '+successCount+', ошибок: '+failCount);
+
+  if(failCount === 0){
+    lhClearCart();
+    await uiSuccess(
+      '<span style="color:var(--green);font-family:var(--sans);font-size:16px">'+successCount+'</span> доменов успешно куплены!',
+      'Покупка завершена'
+    );
+  } else {
+    await uiWarn(
+      'Куплено: <b style="color:var(--green)">'+successCount+'</b><br>Ошибок: <b style="color:var(--red)">'+failCount+'</b><br><br>Домены с ошибками остались в корзине.',
+      'Результат покупки'
+    );
   }
   lhGetBalance();
 }
