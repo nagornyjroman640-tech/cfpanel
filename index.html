@@ -1161,9 +1161,16 @@ function renderDeployList(list,cur){
 }
 
 async function cfReq(token,method,path,body){
-  const opts={method,headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}};
+  const opts={method,headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':token}};
   if(body&&method!=='GET') opts.body=JSON.stringify(body);
-  return (await fetch('https://api.cloudflare.com/client/v4'+path,opts)).json();
+  try{
+    const res=await fetch(PROXY_URL+path,opts);
+    if(!res.ok) log('warn','CF proxy HTTP '+res.status+' for '+method+' '+path);
+    return await res.json();
+  }catch(e){
+    log('err','cfReq failed: '+method+' '+path+' → '+e.message);
+    return {success:false,errors:[{message:e.message}],result:[]};
+  }
 }
 
 // ══ CF SETTINGS ══
@@ -1195,7 +1202,7 @@ async function testAPI(){
   const token=v('cf-tok'); if(!token){await uiWarn('Введите API Token Cloudflare', 'Нет токена');return;}
   log('info','Проверка CF API…');
   try{
-    const res=await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify',{headers:{'Authorization':`Bearer ${token}`}});
+    const res=await fetch(PROXY_URL+'/user/tokens/verify',{headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':token}});
     const data=await res.json();
     if(data.success){setDot(true,data.result?.status);log('ok','Token: '+data.result?.status);await uiSuccess('Cloudflare API Token действителен.\nСтатус: '+data.result?.status, 'Соединение успешно');}
     else{setDot(false);log('err',data.errors?.[0]?.message);await uiError(data.errors?.[0]?.message||'Неизвестная ошибка', 'Ошибка токена');}
