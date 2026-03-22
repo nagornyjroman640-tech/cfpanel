@@ -472,10 +472,21 @@ nav{flex:1;padding:8px;overflow-y:auto}
         <div class="card">
           <div class="card-head"><span>🛒</span><span class="card-title">LuxHost API</span></div>
           <div class="card-body">
-            <div class="field"><label class="field-label">API Token</label><div class="tok-wrap"><input type="password" id="lh-token" placeholder="LuxHost API Token"><span class="eye" onclick="toggleEye('lh-token',this)">👁</span></div><div class="field-hint">LuxHost → Личный кабинет → API</div></div>
+            <div class="field"><label class="field-label">API Token <span style="font-size:10px;color:var(--text3)">(для баланса, поиска, доменов)</span></label><div class="tok-wrap"><input type="password" id="lh-token" placeholder="LuxHost API Token (lux_...)"><span class="eye" onclick="toggleEye('lh-token',this)">👁</span></div><div class="field-hint">LuxHost → API Keys → Watch key</div></div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn btn-primary" onclick="saveLhToken()">💾 Сохранить</button>
               <button class="btn" onclick="lhGetBalance()">🔌 Проверить</button>
+            </div>
+            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">🔐 Для покупки доменов</div>
+              <div class="info-box" style="margin-bottom:10px"><span>ℹ️</span><span>Покупка доменов требует JWT токен и Contact ID. JWT: скопируйте из Local Storage на luxhost.cc (ключ "user" → "token"). Contact ID: URL вашего контакта на luxhost.cc/contact/XXX</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div class="field"><label class="field-label">JWT Token</label><div class="tok-wrap"><input type="password" id="lh-jwt" placeholder="eyJhbGciOiJ..."><span class="eye" onclick="toggleEye('lh-jwt',this)">👁</span></div></div>
+                <div class="field"><label class="field-label">Contact ID</label><input type="text" id="lh-contact-id" placeholder="68da8aa91205..."></div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-primary" onclick="saveLhPurchaseSettings()">💾 Сохранить</button>
+              </div>
             </div>
           </div>
         </div>
@@ -700,7 +711,11 @@ function loadCF(){
     if(doc.exists){ cfCfg=doc.data(); document.getElementById('cf-tok').value=cfCfg.token||''; document.getElementById('cf-acc').value=cfCfg.account||''; setDot(!!cfCfg.token); }
   });
   db.collection('settings').doc('luxhost').get().then(doc=>{
-    if(doc.exists && doc.data().token){ document.getElementById('lh-token').value=doc.data().token; }
+    if(doc.exists){
+      if(doc.data().token) document.getElementById('lh-token').value=doc.data().token;
+      if(doc.data().jwt) document.getElementById('lh-jwt').value=doc.data().jwt;
+      if(doc.data().contactId) document.getElementById('lh-contact-id').value=doc.data().contactId;
+    }
   });
 }
 
@@ -1083,6 +1098,18 @@ async function saveLhToken(){
   log('ok','LuxHost токен сохранён');await uiSuccess('LuxHost API Token сохранён.', 'Сохранено');
 }
 
+async function saveLhPurchaseSettings(){
+  const jwt=v('lh-jwt');
+  const contactId=v('lh-contact-id');
+  if(!jwt || !contactId){ await uiWarn('Заполните оба поля: JWT Token и Contact ID', 'Неполные данные'); return; }
+  await db.collection('settings').doc('luxhost').set({jwt,contactId,updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  log('ok','JWT и Contact ID сохранены');
+  await uiSuccess('Настройки покупки сохранены.', 'Сохранено');
+}
+
+function getLhJwt(){ return document.getElementById('lh-jwt') ? document.getElementById('lh-jwt').value.trim() : ''; }
+function getLhContactId(){ return document.getElementById('lh-contact-id') ? document.getElementById('lh-contact-id').value.trim() : ''; }
+
 async function testAPI(){
   const token=v('cf-tok'); if(!token){await uiWarn('Введите API Token Cloudflare', 'Нет токена');return;}
   log('info','Проверка CF API…');
@@ -1299,6 +1326,19 @@ function lhClearCart(){
 
 async function lhBuyCart(){
   if(!lhCart.size){ await uiWarn('Добавьте домены в корзину перед покупкой.', 'Корзина пуста'); return; }
+
+  // Check JWT and contactId
+  const jwt = getLhJwt();
+  const contactId = getLhContactId();
+  if(!jwt || !contactId){
+    await uiError(
+      'Для покупки доменов нужны JWT Token и Contact ID.<br><br>'
+      + 'Перейдите в <b>Настройки → LuxHost API → Для покупки доменов</b> и заполните оба поля.',
+      'Настройки не заполнены'
+    );
+    return;
+  }
+
   let total = 0;
   lhCart.forEach(function(item){ total += item.price; });
   const domains = Array.from(lhCart.keys());
@@ -1480,11 +1520,43 @@ async function lhBuyOne(domain){
     log('err', '['+domain+'] Укажите домен с зоной (например '+domain+'.com)');
     return false;
   }
-  log('info', '['+domain+'] Покупка...');
-  // API expects {domains: ["domain.xyz"]} — array format
-  const data = await lhReq('POST', '/public/api/domains/purchase', { domains: [domain] });
 
-  // Log full response for debugging
+  const jwt = getLhJwt();
+  const contactId = getLhContactId();
+  if(!jwt || !contactId){
+    log('err', '['+domain+'] JWT или Contact ID не настроены. Перейдите в Настройки → LuxHost API.');
+    return false;
+  }
+
+  log('info', '['+domain+'] Покупка...');
+
+  // LuxHost API v2: POST /api/v2/domains/purchase
+  // Body: {domains: [{contactId, domain, ns}]}
+  // Auth: Bearer JWT
+  let data = null;
+  try{
+    const res = await fetch(PROXY_URL + '/api/v2/domains/purchase', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Target': 'luxhost',
+        'X-API-Key': jwt
+      },
+      body: JSON.stringify({
+        domains: [{
+          contactId: contactId,
+          domain: domain,
+          ns: []
+        }]
+      })
+    });
+    data = await res.json();
+  }catch(e){
+    log('err', '['+domain+'] Ошибка сети: '+e.message);
+    return false;
+  }
+
+  // Log full response
   log('info', '['+domain+'] API ответ: ' + JSON.stringify(data).slice(0, 300));
 
   if(!data){
@@ -1492,45 +1564,29 @@ async function lhBuyOne(domain){
     return false;
   }
 
-  // API may return array of results for {domains:[...]} format
+  // API may return array or single object
   const result = Array.isArray(data) ? data[0] : data;
 
-  // Success check
-  const hasId = result.id || result.domainId || result.domain_id;
-  const hasError = result.error || result.statusCode >= 400;
+  // Success — response has id and domain
+  const hasId = result && (result.id || result.domainId || result.domain_id);
+  const hasError = result && (result.error || result.statusCode >= 400);
 
   if(hasId && !hasError){
-    log('ok', '['+domain+'] Куплен! (ID: '+(result.id||result.domainId||result.domain_id)+') Запускаем автоматику...');
+    log('ok', '['+domain+'] Куплен! (ID: '+(result.id||result.domainId||result.domain_id)+')');
     await autoSetupDomain(domain, result.id || result.domainId || result.domain_id);
     return true;
   }
 
-  // If response has message but also has id — it might be success with info
-  if(hasId && result.message){
-    log('ok', '['+domain+'] Куплен с сообщением: '+result.message);
-    await autoSetupDomain(domain, result.id || result.domainId || result.domain_id);
-    return true;
-  }
-
-  // If no error fields at all and no id — might still be success
-  if(!result.error && !result.statusCode && !result.message && typeof result === 'object'){
-    log('ok', '['+domain+'] Ответ без ошибок, считаем куплен');
-    await autoSetupDomain(domain, result.id || result.domainId || result.domain_id || '');
-    return true;
-  }
-
-  // Error handling
-  const rawErr = result.error || (Array.isArray(result.message) ? result.message.join('; ') : result.message) || result.msg || JSON.stringify(result);
-  let errMsg = rawErr;
-  const errLow = String(rawErr).toLowerCase();
+  // Error
+  const rawErr = result ? (result.error || (Array.isArray(result.message) ? result.message.join('; ') : result.message) || result.msg || JSON.stringify(result)) : 'нет ответа';
+  let errMsg = String(rawErr);
+  const errLow = errMsg.toLowerCase();
   if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
-    errMsg = 'Недостаточно средств на балансе. Пополните на luxhost.cc/wallet';
+    errMsg = 'Недостаточно средств. Пополните на luxhost.cc/wallet';
   } else if(errLow.includes('already') || errLow.includes('exist')){
     errMsg = 'Домен уже зарегистрирован';
-  } else if(errLow.includes('invalid') || errLow.includes('bad request')){
-    errMsg = 'Некорректный запрос';
-  } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('key')){
-    errMsg = 'Ошибка авторизации — проверьте API токен';
+  } else if(errLow.includes('unauthorized') || errLow.includes('jwt') || errLow.includes('token expired')){
+    errMsg = 'JWT токен истёк — обновите в Настройках';
   }
   log('err', '['+domain+'] '+errMsg+' (raw: '+String(rawErr).slice(0,150)+')');
   return false;
