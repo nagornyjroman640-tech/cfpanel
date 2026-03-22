@@ -1481,7 +1481,8 @@ async function lhBuyOne(domain){
     return false;
   }
   log('info', '['+domain+'] Покупка...');
-  const data = await lhReq('POST', '/public/api/domains/purchase', { domain: domain });
+  // API expects {domains: ["domain.xyz"]} — array format
+  const data = await lhReq('POST', '/public/api/domains/purchase', { domains: [domain] });
 
   // Log full response for debugging
   log('info', '['+domain+'] API ответ: ' + JSON.stringify(data).slice(0, 300));
@@ -1491,26 +1492,35 @@ async function lhBuyOne(domain){
     return false;
   }
 
-  // Success check — API may return domain data with id, or success:true, or just no error field
-  const hasId = data.id || data.domainId || data.domain_id;
-  const hasError = data.error || data.statusCode >= 400;
-  const hasMessage = data.message && !hasId;
+  // API may return array of results for {domains:[...]} format
+  const result = Array.isArray(data) ? data[0] : data;
+
+  // Success check
+  const hasId = result.id || result.domainId || result.domain_id;
+  const hasError = result.error || result.statusCode >= 400;
 
   if(hasId && !hasError){
-    log('ok', '['+domain+'] Куплен! (ID: '+(data.id||data.domainId||data.domain_id)+') Запускаем автоматику...');
-    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+    log('ok', '['+domain+'] Куплен! (ID: '+(result.id||result.domainId||result.domain_id)+') Запускаем автоматику...');
+    await autoSetupDomain(domain, result.id || result.domainId || result.domain_id);
     return true;
   }
 
   // If response has message but also has id — it might be success with info
-  if(hasId && data.message){
-    log('ok', '['+domain+'] Куплен с сообщением: '+data.message);
-    await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+  if(hasId && result.message){
+    log('ok', '['+domain+'] Куплен с сообщением: '+result.message);
+    await autoSetupDomain(domain, result.id || result.domainId || result.domain_id);
+    return true;
+  }
+
+  // If no error fields at all and no id — might still be success
+  if(!result.error && !result.statusCode && !result.message && typeof result === 'object'){
+    log('ok', '['+domain+'] Ответ без ошибок, считаем куплен');
+    await autoSetupDomain(domain, result.id || result.domainId || result.domain_id || '');
     return true;
   }
 
   // Error handling
-  const rawErr = data.error || data.message || data.msg || JSON.stringify(data);
+  const rawErr = result.error || (Array.isArray(result.message) ? result.message.join('; ') : result.message) || result.msg || JSON.stringify(result);
   let errMsg = rawErr;
   const errLow = String(rawErr).toLowerCase();
   if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
