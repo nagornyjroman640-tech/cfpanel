@@ -1678,14 +1678,26 @@ async function lhCreateInvoice(){
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">⟳ Создаю счёт...</div>';
 
-  // LuxHost API v2 - amount in cents, split currency|network
+  // Split currency selector value: "usdt|tron" → currency="usdt", network="tron"
   const [cur, net] = currency.split('|');
-  const data = await lhReq('POST', '/api/v2/payments/create', {
+
+  // LuxHost API: POST /public_api/payments/createInvoice
+  // Amount in cents (e.g. $100 = 10000), currency & network lowercase
+  const invoiceBody = {
     amount: Math.round(amountNum * 100),
     currency: cur,
     network: net,
     paymentStrategy: 'crypto'
-  });
+  };
+
+  // Try the documented Swagger path first, fallback to alternative path
+  let data = await lhReq('POST', '/public_api/payments/createInvoice', invoiceBody);
+
+  // If first path returns 404 or "not found", try alternative path
+  if(data && (data.statusCode === 404 || (data.message && String(data.message).toLowerCase().includes('not found')))){
+    log('info', 'Путь /public_api/ не найден, пробую /public/api/...');
+    data = await lhReq('POST', '/public/api/payments/createInvoice', invoiceBody);
+  }
 
   result.innerHTML = '';
 
@@ -1694,21 +1706,25 @@ async function lhCreateInvoice(){
     return;
   }
 
-  // Check for errors in various formats
-  const hasError = data.error || data.message || data.status === 'error' || data.success === false;
-  if(hasError){
+  log('info', 'createInvoice response: ' + JSON.stringify(data).slice(0, 500));
+
+  // Check for actual errors (NOT "pending" status — that's a success!)
+  const isError = data.error || (data.message && !data.id) || data.statusCode >= 400 || data.success === false;
+  if(isError){
     const errRaw = data.error || data.message || data.detail || JSON.stringify(data);
     const errLow = String(errRaw).toLowerCase();
     let friendly = 'Не удалось создать счёт. Попробуйте снова.';
-    if(errLow.includes('minimum') || errLow.includes('min') || errLow.includes('least')){
+    if(errLow.includes('missing required')){
+      friendly = 'Сервер не принял параметры. Попробуйте другую сумму или валюту.';
+    } else if(errLow.includes('minimum') || errLow.includes('min') || errLow.includes('least')){
       friendly = 'Минимальная сумма пополнения — <b style="color:var(--accent)">$5</b>';
     } else if(errLow.includes('maximum') || errLow.includes('max')){
       friendly = 'Превышена максимальная сумма пополнения.';
-    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('401')){
-      friendly = 'Ошибка авторизации. Проверьте LuxHost API токен.';
+    } else if(errLow.includes('auth') || errLow.includes('token') || errLow.includes('401') || errLow.includes('unauthorized')){
+      friendly = 'Ошибка авторизации. Проверьте LuxHost API токен в Настройках.';
     } else if(errLow.includes('bad request') || errLow.includes('400')){
       friendly = 'Некорректный запрос. Проверьте сумму и валюту.';
-    } else if(errRaw.length < 100){
+    } else if(errRaw.length < 150){
       friendly = errRaw;
     }
     log('err', 'Ошибка счёта: '+errRaw);
@@ -1716,27 +1732,28 @@ async function lhCreateInvoice(){
     return;
   }
 
-  // Success - extract payment details
-  // API v2 response format: {id, amount, status, expiredAt, metadata: {paymentAddress, currency, network}, type}
+  // Success — response format:
+  // {id, amount, status:"pending", expiredAt, metadata:{currency,network,paymentAddress}, type:"invoice"}
   const invoiceId = data.id || '';
-  const address   = (data.metadata && data.metadata.paymentAddress) || data.address || '';
+  const address   = (data.metadata && data.metadata.paymentAddress) || data.paymentAddress || data.address || '';
   const network   = (data.metadata && data.metadata.network) || net || '';
   const payAmount = data.amount ? (data.amount / 100).toFixed(2) : amountNum.toFixed(2);
   const expiry    = data.expiredAt || data.expires_at || '';
   const payUrl    = invoiceId ? 'https://luxhost.cc/payment/'+invoiceId : '';
 
-  log('ok', 'Счёт создан! Сумма: '+(payAmount||amountNum)+' '+currency);
+  log('ok', 'Счёт создан! ID: '+invoiceId+' | Сумма: $'+payAmount+' | Адрес: '+(address||'—'));
 
-  // Show result as modal for better UX
+  // Show payment details in a modal
   const curLabel = cur ? cur.toUpperCase() : '';
   const netLabel = network ? ' ('+network.toUpperCase()+')' : '';
   let bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px">';
   bodyHtml += '<div style="padding:10px 12px;background:rgba(62,207,142,.08);border:1px solid rgba(62,207,142,.2);border-radius:8px;font-size:13px;color:var(--green);font-weight:600">✓ Счёт успешно создан</div>';
-  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Сумма к зачислению:</span><span style="color:var(--accent);font-weight:700">$'+amountNum.toFixed(2)+'</span></div>';
+  if(invoiceId) bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text2)">Invoice:</span><span style="color:var(--text);font-family:var(--mono);font-size:10px;word-break:break-all">'+invoiceId+'</span></div>';
+  bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Сумма к зачислению:</span><span style="color:var(--accent);font-weight:700">$'+payAmount+'</span></div>';
   bodyHtml += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Валюта:</span><span style="font-weight:600">'+curLabel+netLabel+'</span></div>';
   if(address){
-    bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-top:2px">Адрес для оплаты (нажмите чтобы скопировать):</div>';
-  bodyHtml += '<div id="lh-pay-addr" style="font-size:11px;color:var(--blue);word-break:break-all;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color .2s" title="Нажмите для копирования">'+address+'</div>';
+    bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-top:2px">Адрес для оплаты:</div>';
+    bodyHtml += '<div id="lh-pay-addr" style="font-size:11px;color:var(--blue);word-break:break-all;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color .2s" title="Нажмите для копирования">'+address+'</div>';
     bodyHtml += '<div style="font-size:10px;color:var(--text3)">👆 Нажмите на адрес чтобы скопировать</div>';
   }
   if(expiry) bodyHtml += '<div style="font-size:11px;color:var(--text3)">⏰ Действует до: '+new Date(expiry).toLocaleString('ru')+'</div>';
@@ -1751,7 +1768,6 @@ async function lhCreateInvoice(){
     okText: 'Закрыть'
   });
 
-  // Clear amount field after success
   document.getElementById('lh-topup-amount').value = '';
   lhGetBalance();
 }
