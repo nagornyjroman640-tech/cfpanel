@@ -1307,10 +1307,10 @@ async function lhBuyCart(){
   const currentBal = parseFloat(balText) || 0;
   if(currentBal > 0 && total > currentBal){
     await uiError(
-      'У вас недостаточный баланс для покупки.<br><br>'
+      'У вас недостаточный баланс.<br><br>'
       + 'Нужно: <b style="color:var(--accent)">$'+total.toFixed(2)+'</b><br>'
       + 'На балансе: <b style="color:var(--red)">$'+currentBal.toFixed(2)+'</b><br><br>'
-      + 'Пожалуйста пополните ваш счёт.',
+      + '<a href="https://luxhost.cc/wallet" target="_blank" style="color:var(--accent);font-weight:700">→ Пополнить баланс на LuxHost</a>',
       'Недостаточно средств'
     );
     return;
@@ -1361,13 +1361,14 @@ async function lhBuyCart(){
     await uiSuccess('Все домены успешно куплены!', 'Готово');
   } else if(successCount === 0){
     await uiError(
-      'У вас недостаточный баланс.<br><br>Пожалуйста пополните ваш счёт.',
+      'У вас недостаточный баланс.<br><br>'
+      + '<a href="https://luxhost.cc/wallet" target="_blank" style="color:var(--accent);font-weight:700">→ Пополнить баланс на LuxHost</a>',
       'Недостаточно средств'
     );
   } else {
     await uiWarn(
       'Часть доменов не удалось купить из-за недостаточного баланса.<br><br>'
-      + 'Пожалуйста пополните ваш счёт и попробуйте снова.',
+      + '<a href="https://luxhost.cc/wallet" target="_blank" style="color:var(--accent);font-weight:700">→ Пополнить баланс на LuxHost</a>',
       'Недостаточно средств'
     );
   }
@@ -1486,7 +1487,7 @@ async function lhBuyOne(domain){
     // Parse common error messages
     const errLow = String(rawErr).toLowerCase();
     if(errLow.includes('balance') || errLow.includes('insufficient') || errLow.includes('funds') || errLow.includes('money')){
-      errMsg = 'Недостаточно средств на балансе';
+      errMsg = 'Недостаточно средств на балансе. Пополните на luxhost.cc/wallet';
     } else if(errLow.includes('already') || errLow.includes('exist')){
       errMsg = 'Домен уже зарегистрирован';
     } else if(errLow.includes('invalid') || errLow.includes('bad request')){
