@@ -196,6 +196,19 @@ nav{flex:1;padding:8px;overflow-y:auto}
 </head>
 <body>
 
+
+<!-- CUSTOM ALERT/CONFIRM MODAL -->
+<div id="ui-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
+  <div id="ui-modal" style="width:400px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;animation:slideUp .2s ease;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="padding:18px 22px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
+      <span id="ui-modal-icon" style="font-size:20px">ℹ️</span>
+      <span id="ui-modal-title" style="font-family:var(--sans);font-weight:800;font-size:14px;flex:1"></span>
+    </div>
+    <div id="ui-modal-body" style="padding:18px 22px;font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
+    <div id="ui-modal-foot" style="padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end"></div>
+  </div>
+</div>
+
 <!-- FIREBASE CONFIG MODAL -->
 <div id="fb-modal" class="modal-ov" style="display:none">
   <div class="modal">
@@ -600,9 +613,9 @@ function showFbModal(){
   document.getElementById('fb-modal').style.display='flex';
 }
 
-function saveFbCfg(){
+async function saveFbCfg(){
   const cfg={apiKey:v('fb-apiKey'),authDomain:v('fb-authDomain'),projectId:v('fb-projectId'),storageBucket:v('fb-storageBucket'),messagingSenderId:v('fb-msgId'),appId:v('fb-appId')};
-  if(!cfg.apiKey||!cfg.projectId){alert('Заполните минимум API Key и Project ID');return;}
+  if(!cfg.apiKey||!cfg.projectId){ uiWarn('Заполните минимум API Key и Project ID', 'Неполные данные'); return;}
   localStorage.setItem('fb_cfg',JSON.stringify(cfg));
   document.getElementById('fb-modal').style.display='none';
   if(initFB(cfg)) log('ok','Firebase подключён: '+cfg.projectId);
@@ -704,7 +717,8 @@ async function parseDomains(){
 
 async function removeDomain(id,name){ await db.collection('domains').doc(id).delete(); log('warn','Удалён: '+name); }
 
-async function clearAll(){ if(!confirm('Очистить все домены?'))return; sync(true); const snap=await db.collection('domains').get(); const b=db.batch(); snap.docs.forEach(d=>b.delete(d.ref)); await b.commit(); sync(false); log('warn','Все домены удалены'); }
+async function clearAll(){ const clrOk = await uiConfirm('Все домены будут удалены из панели.', 'Очистить список?', {danger:true, okText:'Удалить'});
+  if(!clrOk) return; sync(true); const snap=await db.collection('domains').get(); const b=db.batch(); snap.docs.forEach(d=>b.delete(d.ref)); await b.commit(); sync(false); log('warn','Все домены удалены'); }
 
 function toggleExpand(id){ expandedDomains.has(id)?expandedDomains.delete(id):expandedDomains.add(id); renderDomains(); }
 
@@ -724,7 +738,8 @@ function updateBulkBar(){
 }
 
 async function deleteSelected(){
-  if(!confirm(`Удалить ${selectedDomains.size} доменов?`))return;
+  const delOk = await uiConfirm('Будет удалено '+selectedDomains.size+' доменов.', 'Удалить домены?', {danger:true, okText:'Удалить'});
+  if(!delOk) return;
   sync(true); const b=db.batch();
   selectedDomains.forEach(id=>b.delete(db.collection('domains').doc(id)));
   await b.commit(); selectedDomains.clear(); sync(false); updateBulkBar();
@@ -816,7 +831,8 @@ async function removeDomainRec(domId,idx){
 }
 
 async function clearDomainRecs(domId){
-  if(!confirm('Удалить все записи домена?'))return;
+  const clrRecOk = await uiConfirm('Все DNS записи этого домена будут удалены.', 'Очистить записи?', {danger:true, okText:'Удалить'});
+  if(!clrRecOk) return;
   await db.collection('domains').doc(domId).update({records:[]});
 }
 
@@ -827,35 +843,35 @@ async function applyTplToDomain(domId){
   log('ok',`[${d.name}] Шаблон применён (${recs.length} записей)`);
 }
 
-function editDomainRec(domId,idx){
+async function editDomainRec(domId,idx){
   const d=domains.find(x=>x.id===domId); if(!d)return;
   const r=(d.records||[])[idx];
   const newType=prompt('Тип (A/AAAA/CNAME/MX/TXT):',r.type);if(!newType)return;
   const newName=prompt('Имя:',r.name);if(newName===null)return;
   const newVal=prompt('IP / значение:',r.value);if(!newVal)return;
   const newTtl=parseInt(prompt('TTL (1=Авто):',r.ttl))||1;
-  const newProxy=confirm('Включить Cloudflare Proxy? (OK=вкл, Отмена=выкл)');
+  const newProxy=await uiConfirm('Включить Cloudflare Proxy для этой записи?','Proxy',{icon:'☁️',okText:'Включить',cancelText:'Выключить'});
   const recs=[...(d.records||[])];
   recs[idx]={type:newType.toUpperCase(),name:newName||'@',value:newVal,ttl:newTtl,proxied:newProxy};
   db.collection('domains').doc(domId).update({records:recs});
   log('ok',`[${d.name}] Запись обновлена: ${newType} ${newName} → ${newVal}`);
 }
 
-function openAddRecModal(domId){
+async function openAddRecModal(domId){
   const d=domains.find(x=>x.id===domId); if(!d)return;
   const type=prompt('Тип (A/AAAA/CNAME/MX/TXT):','A');if(!type)return;
   const name=prompt('Имя (@ для корня):','@');if(name===null)return;
   const val=prompt('IP / значение:');if(!val)return;
   const ttl=parseInt(prompt('TTL (1=Авто):','1'))||1;
-  const proxied=confirm('Включить Cloudflare Proxy?');
+  const proxied=await uiConfirm('Включить Cloudflare Proxy для этой записи?','Proxy',{icon:'☁️',okText:'Включить',cancelText:'Выключить'});
   const recs=[...(d.records||[]),{type:type.toUpperCase(),name:name||'@',value:val,ttl,proxied}];
   db.collection('domains').doc(domId).update({records:recs});
   log('ok',`[${d.name}] Запись добавлена: ${type} ${name} → ${val}`);
 }
 
 // ══ BULK APPLY ══
-function openBulkModal(){
-  if(!selectedDomains.size){alert('Выберите домены');return;}
+async function openBulkModal(){
+  if(!selectedDomains.size){await uiWarn('Выделите домены галочками для выбора.','Ничего не выбрано'); return;}
   document.getElementById('bulk-info').textContent=`Записи будут применены к ${selectedDomains.size} доменам. Выберите шаблон или добавьте вручную.`;
   bulkRecs=[];
   bulkProxy=true; renderBulkRecs();
@@ -877,9 +893,9 @@ function renderBulkRecs(){
 
 function toggleBulkProxy(){ bulkProxy=!bulkProxy; document.getElementById('b-cloud').classList.toggle('on',bulkProxy); const l=document.getElementById('b-lbl'); l.classList.toggle('on',bulkProxy); l.textContent=bulkProxy?'вкл':'выкл'; }
 
-function addBulkRec(){
+async function addBulkRec(){
   const type=v('b-type')||'A', name=v('b-name')||'@', val=v('b-val'), ttl=parseInt(document.getElementById('b-ttl').value)||1;
-  if(!val){alert('Укажи значение');return;}
+  if(!val){await uiWarn('Введите IP адрес или значение записи','Пустое значение'); return;}
   bulkRecs.push({type,name,value:val,ttl,proxied:bulkProxy});
   document.getElementById('b-val').value=''; renderBulkRecs();
 }
@@ -893,7 +909,7 @@ function applyBulkTpl(name){
 }
 
 async function applyBulkToSelected(){
-  if(!bulkRecs.length){alert('Добавьте хотя бы одну запись');return;}
+  if(!bulkRecs.length){await uiWarn('Добавьте хотя бы одну DNS запись перед применением.','Нет записей'); return;}
   const replace=document.getElementById('bulk-replace').checked;
   sync(true);
   for(const id of selectedDomains){
@@ -912,7 +928,7 @@ function toggleNTP(){ newTplProxy=!newTplProxy; document.getElementById('nt-clou
 
 async function addTplRec(){
   const type=v('nt-type')||'A', name=v('nt-name')||'@', val=v('nt-val'), ttl=parseInt(document.getElementById('nt-ttl').value)||1;
-  if(!val){alert('Укажи значение');return;}
+  if(!val){await uiWarn('Введите IP адрес или значение записи','Пустое значение'); return;}
   await db.collection('template').add({type,name,value:val,ttl,proxied:newTplProxy,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
   document.getElementById('nt-val').value='';
   log('ok',`Шаблон: ${type} ${name} → ${val}`);
@@ -945,7 +961,8 @@ function renderTpl(){
   document.getElementById('nb-t').textContent=tplRecs.length;
 }
 
-async function clearTpl(){ if(!confirm('Очистить шаблон?'))return; const snap=await db.collection('template').get(); const b=db.batch(); snap.docs.forEach(d=>b.delete(d.ref)); await b.commit(); log('warn','Шаблон очищен'); }
+async function clearTpl(){ const clrTplOk = await uiConfirm('Шаблон DNS будет очищен.', 'Очистить шаблон?', {danger:true, okText:'Удалить'});
+  if(!clrTplOk) return; const snap=await db.collection('template').get(); const b=db.batch(); snap.docs.forEach(d=>b.delete(d.ref)); await b.commit(); log('warn','Шаблон очищен'); }
 
 async function applyTpl(name){
   const IP='1.2.3.4';
@@ -967,9 +984,9 @@ function updateDeployInfo(){
 async function startDeploy(){
   if(running)return;
   const token=v('cf-tok'), account=v('cf-acc');
-  if(!token||!account){alert('Настройте API Token и Account ID');go('settings');return;}
+  if(!token||!account){await uiWarn('Перейдите в «Настройки» и введите CF API Token и Account ID.', 'CF не настроен'); go('settings'); return;}
   const pend=domains.filter(d=>d.status!=='done');
-  if(!pend.length){alert('Нет доменов для деплоя');return;}
+  if(!pend.length){await uiWarn('Все домены уже задеплоены или список пуст.', 'Нет доменов'); return;}
   running=true;
   const btn=document.getElementById('dp-btn'); btn.textContent='⏳…'; btn.disabled=true;
   document.getElementById('prog-fill').style.width='0%';
@@ -1047,24 +1064,24 @@ async function cfReq(token,method,path,body){
 async function saveCF(){
   const token=v('cf-tok'), account=v('cf-acc');
   await db.collection('settings').doc('cloudflare').set({token,account,updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-  setDot(!!token); log('ok','CF настройки сохранены');alert('✅ Сохранено!');
+  setDot(!!token); log('ok','CF настройки сохранены');await uiSuccess('Настройки API сохранены в Firebase.', 'Сохранено');
 }
 
 async function saveLhToken(){
   const token=v('lh-token');
   await db.collection('settings').doc('luxhost').set({token,updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-  log('ok','LuxHost токен сохранён');alert('✅ Сохранено!');
+  log('ok','LuxHost токен сохранён');await uiSuccess('LuxHost API Token сохранён.', 'Сохранено');
 }
 
 async function testAPI(){
-  const token=v('cf-tok'); if(!token){alert('Введите API Token');return;}
+  const token=v('cf-tok'); if(!token){await uiWarn('Введите API Token Cloudflare', 'Нет токена');return;}
   log('info','Проверка CF API…');
   try{
     const res=await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify',{headers:{'Authorization':`Bearer ${token}`}});
     const data=await res.json();
-    if(data.success){setDot(true,data.result?.status);log('ok','Token: '+data.result?.status);alert('✅ OK!');}
-    else{setDot(false);log('err',data.errors?.[0]?.message);alert('❌ '+data.errors?.[0]?.message);}
-  }catch(e){log('err',e.message);alert('❌ '+e.message);}
+    if(data.success){setDot(true,data.result?.status);log('ok','Token: '+data.result?.status);await uiSuccess('Cloudflare API Token действителен.\nСтатус: '+data.result?.status, 'Соединение успешно');}
+    else{setDot(false);log('err',data.errors?.[0]?.message);await uiError(data.errors?.[0]?.message||'Неизвестная ошибка', 'Ошибка токена');}
+  }catch(e){log('err',e.message); await uiError(e.message,'Ошибка соединения');}
 }
 
 function setDot(ok,sub){ document.getElementById('api-dot').className='api-dot '+(ok?'ok':'err'); document.getElementById('api-sub').textContent=ok?(sub||'настроен'):'не настроен'; }
@@ -1097,6 +1114,79 @@ function clearLogs(){ logs=[]; document.getElementById('terminal').innerHTML='';
 function exportLogs(){ const a=document.createElement('a'); a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(logs.map(l=>`[${l.t}] [${l.type.toUpperCase()}] ${l.msg}`).join('\n')); a.download=`cf-logs-${Date.now()}.txt`; a.click(); }
 
 
+// ══ CUSTOM MODALS ══
+function uiModal(opts){
+  return new Promise(function(resolve){
+    const ov = document.getElementById('ui-modal-ov');
+    document.getElementById('ui-modal-icon').textContent  = opts.icon  || 'ℹ️';
+    document.getElementById('ui-modal-title').textContent = opts.title || 'Сообщение';
+    document.getElementById('ui-modal-body').textContent  = opts.body  || '';
+    const foot = document.getElementById('ui-modal-foot');
+    foot.innerHTML = '';
+    ov.style.display = 'flex';
+
+    function close(val){
+      ov.style.display = 'none';
+      foot.innerHTML = '';
+      resolve(val);
+    }
+
+    if(opts.type === 'alert'){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary'; btn.textContent = opts.okText || 'OK';
+      btn.onclick = function(){ close(true); };
+      foot.appendChild(btn);
+    } else if(opts.type === 'confirm'){
+      const cancel = document.createElement('button');
+      cancel.className = 'btn'; cancel.textContent = opts.cancelText || 'Отмена';
+      cancel.onclick = function(){ close(false); };
+      const ok = document.createElement('button');
+      ok.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+      ok.textContent = opts.okText || 'OK';
+      ok.onclick = function(){ close(true); };
+      foot.appendChild(cancel); foot.appendChild(ok);
+    } else if(opts.type === 'input'){
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = opts.defaultVal || '';
+      inp.style.cssText = 'width:100%;margin-bottom:12px';
+      document.getElementById('ui-modal-body').appendChild(inp);
+      inp.focus();
+      const cancel = document.createElement('button');
+      cancel.className = 'btn'; cancel.textContent = 'Отмена';
+      cancel.onclick = function(){ close(null); };
+      const ok = document.createElement('button');
+      ok.className = 'btn btn-primary'; ok.textContent = opts.okText || 'OK';
+      ok.onclick = function(){ close(inp.value); };
+      inp.onkeydown = function(e){ if(e.key==='Enter') close(inp.value); if(e.key==='Escape') close(null); };
+      foot.appendChild(cancel); foot.appendChild(ok);
+    }
+
+    // Close on backdrop click for alerts
+    if(opts.type === 'alert'){
+      ov.onclick = function(e){ if(e.target===ov) close(true); };
+    }
+  });
+}
+
+// Shorthand helpers
+function uiAlert(body, title, icon){
+  return uiModal({type:'alert', title: title||'Сообщение', body: body, icon: icon||'ℹ️'});
+}
+function uiConfirm(body, title, opts){
+  opts = opts || {};
+  return uiModal({type:'confirm', title: title||'Подтверждение', body: body, icon: opts.icon||'❓', danger: opts.danger, okText: opts.okText, cancelText: opts.cancelText});
+}
+function uiSuccess(body, title){
+  return uiModal({type:'alert', title: title||'Успешно', body: body, icon: '✅', okText: 'Отлично'});
+}
+function uiError(body, title){
+  return uiModal({type:'alert', title: title||'Ошибка', body: body, icon: '❌', okText: 'Понятно'});
+}
+function uiWarn(body, title){
+  return uiModal({type:'alert', title: title||'Внимание', body: body, icon: '⚠️', okText: 'OK'});
+}
+
+
 // ══ LUXHOST API ══
 let lhCart = new Map(); // domain -> {price, priceRaw}
 
@@ -1106,7 +1196,7 @@ function getLhToken(){
 
 async function lhReq(method, path, body){
   const token = getLhToken();
-  if(!token){ alert('Введите LuxHost API Token в Настройках'); return null; }
+  if(!token){ await uiWarn('Перейдите в раздел «Настройки» и введите LuxHost API Token.', 'Токен не настроен'); return null; }
   try{
     const opts = {
       method: method,
@@ -1189,11 +1279,12 @@ function lhClearCart(){
 }
 
 async function lhBuyCart(){
-  if(!lhCart.size){ alert('Корзина пуста'); return; }
+  if(!lhCart.size){ await uiWarn('Добавьте домены в корзину перед покупкой.', 'Корзина пуста'); return; }
   let total = 0;
   lhCart.forEach(function(item){ total += item.price; });
   const domains = Array.from(lhCart.keys());
-  if(!confirm('Купить ' + lhCart.size + ' доменов на сумму $' + total.toFixed(2) + '?\n\n' + domains.join('\n'))) return;
+  const cartBuyOk = await uiConfirm('Домены:\n' + domains.join('\n') + '\n\nИтого: $' + total.toFixed(2), 'Купить ' + lhCart.size + ' доменов?', {icon:'🛒',okText:'Купить'});
+  if(!cartBuyOk) return;
   log('info', 'Начинаю покупку ' + lhCart.size + ' доменов...');
   const toProcess = new Map(lhCart);
   lhClearCart();
@@ -1207,7 +1298,7 @@ async function lhBuyCart(){
 // ── SEARCH ──
 async function lhSearch(){
   const q = document.getElementById('lh-search-input').value.trim();
-  if(!q){ alert('Введите домен'); return; }
+  if(!q){ await uiWarn('Введите домен для поиска', 'Пустой запрос'); return; }
   log('info', 'Поиск: '+q);
   const res = document.getElementById('lh-search-results');
   res.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Поиск...</div>';
@@ -1250,7 +1341,7 @@ async function lhBulkSearch(){
   const lines = document.getElementById('lh-bulk-input').value.split('\n')
     .map(function(l){ return l.trim().toLowerCase(); })
     .filter(function(l){ return l && l.includes('.'); });
-  if(!lines.length){ alert('Введите домены (с зоной, например example.com)'); return; }
+  if(!lines.length){ await uiWarn('Введите домены в поле (с зоной, например example.com)', 'Нет доменов'); return; }
   log('info', 'Массовая проверка: '+lines.length+' доменов');
   document.getElementById('lh-bulk-stat').textContent = 'Проверяю...';
   document.getElementById('lh-bulk-results').innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px">Идёт проверка...</div>';
@@ -1290,9 +1381,9 @@ async function lhBulkSearch(){
   log('ok', statText);
 }
 
-function lhAddSelectedToCart(){
+async function lhAddSelectedToCart(){
   const checks = document.querySelectorAll('.lh-bulk-check:checked');
-  if(!checks.length){ alert('Отметьте домены галочками'); return; }
+  if(!checks.length){ await uiWarn('Отметьте галочками домены которые хотите добавить в корзину.', 'Ничего не выбрано'); return; }
   checks.forEach(function(cb){
     lhAddToCart(cb.dataset.domain, cb.dataset.price);
   });
@@ -1300,18 +1391,20 @@ function lhAddSelectedToCart(){
 
 // ── BUY ONE ──
 async function lhBuyOne(domain){
-  // Validate domain has TLD
   if(!domain.includes('.')){
     log('err', '['+domain+'] Укажите домен с зоной (например '+domain+'.com)');
-    return;
+    return false;
   }
   log('info', '['+domain+'] Покупка...');
   const data = await lhReq('POST', '/public/api/domains/purchase', { domain: domain });
   if(data && !data.error && !data.message){
     log('ok', '['+domain+'] Куплен! Запускаем автоматику...');
     await autoSetupDomain(domain, data.id || data.domainId || data.domain_id);
+    return true;
   } else {
-    log('err', '['+domain+'] Ошибка покупки: '+(data ? (data.error || data.message || JSON.stringify(data)) : 'нет ответа'));
+    const errMsg = data ? (data.error || data.message || JSON.stringify(data).slice(0,100)) : 'нет ответа';
+    log('err', '['+domain+'] Ошибка: '+errMsg);
+    return false;
   }
 }
 
@@ -1412,8 +1505,9 @@ async function lhGetDomains(){
 async function lhSetCfNs(domainId, domain){
   const cfToken = document.getElementById('cf-tok').value.trim();
   const cfAccount = document.getElementById('cf-acc').value.trim();
-  if(!cfToken || !cfAccount){ alert('Настройте CF API Token и Account ID'); return; }
-  if(!confirm('Сменить NS для '+domain+' на Cloudflare?')) return;
+  if(!cfToken || !cfAccount){ await uiWarn('Перейдите в Настройки и заполните CF API Token и Account ID', 'CF не настроен'); return; }
+  const nsOk = await uiConfirm('Nameservers домена '+domain+' будут изменены на серверы Cloudflare.', 'Сменить NS?', {icon:'☁️',okText:'Сменить'});
+  if(!nsOk) return;
 
   log('info', '['+domain+'] Ищем зону в CF...');
   const listRes = await fetch(PROXY_URL+'/zones?name='+domain, {
@@ -1443,7 +1537,7 @@ async function lhSetCfNs(domainId, domain){
   const nsRes = await lhReq('POST', '/public/api/domains/'+domainId+'/change-ns', { nameservers: nsServers });
   if(nsRes && !nsRes.error){
     log('ok', '['+domain+'] NS → '+nsServers.join(', ')+' ✓');
-    alert('✅ NS обновлены!');
+    await uiSuccess('Nameservers успешно обновлены на серверы Cloudflare.', 'NS обновлены');
   } else {
     log('err', '['+domain+'] NS ошибка: '+(nsRes ? (nsRes.error||nsRes.message||'?') : '?'));
   }
@@ -1454,7 +1548,7 @@ async function lhSetCfNs(domainId, domain){
 async function lhCreateInvoice(){
   const amount = document.getElementById('lh-topup-amount').value.trim();
   const currency = document.getElementById('lh-topup-currency').value;
-  if(!amount || parseFloat(amount) <= 0){ alert('Введите сумму'); return; }
+  if(!amount || parseFloat(amount) <= 0){ await uiWarn('Введите сумму для пополнения баланса', 'Укажите сумму'); return; }
   log('info', 'Создаём счёт на $'+amount+' ('+currency+')...');
   const result = document.getElementById('lh-invoice-result');
   result.innerHTML = '<div style="font-size:11px;color:var(--text3)">Создаю...</div>';
