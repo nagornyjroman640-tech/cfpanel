@@ -352,13 +352,11 @@ nav{flex:1;padding:8px;overflow-y:auto}
     <div class="user-bar"><div class="u-avatar">👤</div><div class="u-email" id="u-email">—</div><span class="logout" onclick="logout()" title="Выйти">⏻</span></div>
     <nav>
       <div class="nav-sec">Управление</div>
-      <div class="nav-item active" onclick="go('domains')"><span class="nav-icon">🌐</span>Домены<span class="nav-badge" id="nb-d">0</span></div>
       <div class="nav-item" onclick="go('template')"><span class="nav-icon">📋</span>Шаблон DNS<span class="nav-badge" id="nb-t">0</span></div>
-      <div class="nav-item" onclick="go('deploy')"><span class="nav-icon">🚀</span>Деплой<span class="nav-badge" id="nb-dp">—</span></div>
       <div class="nav-sec">Cloudflare</div>
       <div class="nav-item" onclick="go('cfzones')"><span class="nav-icon">☁️</span>CF Зоны<span class="nav-badge" id="nb-cfz">—</span></div>
       <div class="nav-sec">Регистратор</div>
-      <div class="nav-item" onclick="go('luxhost')"><span class="nav-icon">🛒</span>LuxHost<span class="nav-badge" id="nb-lh">—</span></div>
+      <div class="nav-item active" onclick="go('luxhost')"><span class="nav-icon">🛒</span>LuxHost<span class="nav-badge" id="nb-lh">—</span></div>
       <div class="nav-sec">Система</div>
       <div class="nav-item" onclick="go('logs')"><span class="nav-icon">📟</span>Логи<span class="nav-badge" id="nb-l">0</span></div>
       <div class="nav-item" onclick="go('settings')"><span class="nav-icon">⚙️</span>Настройки</div>
@@ -368,13 +366,13 @@ nav{flex:1;padding:8px;overflow-y:auto}
 
   <main class="main">
     <div class="topbar">
-      <div><span class="pg-title" id="pg-title">Домены</span><span class="pg-sub" id="pg-sub">Список доменов с DNS записями</span></div>
+      <div><span class="pg-title" id="pg-title">LuxHost</span><span class="pg-sub" id="pg-sub">Покупка доменов · Смена NS · Управление</span></div>
       <div class="tb-right" id="tb-right"></div>
     </div>
     <div class="content">
 
       <!-- DOMAINS TAB -->
-      <div class="tab-pane active" id="tab-domains">
+      <div class="tab-pane" id="tab-domains">
         <div class="stats">
           <div class="stat"><div class="stat-n" id="s-t">0</div><div class="stat-l">Всего</div></div>
           <div class="stat"><div class="stat-n" id="s-d" style="color:var(--green)">0</div><div class="stat-l">Готово</div></div>
@@ -562,7 +560,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
       </div>
 
       <!-- LUXHOST TAB -->
-      <div class="tab-pane" id="tab-luxhost">
+      <div class="tab-pane active" id="tab-luxhost">
 
         <!-- Row 1: Balance + Search -->
         <div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start">
