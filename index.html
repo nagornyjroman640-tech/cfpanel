@@ -18,7 +18,7 @@
   --mono:'JetBrains Mono',monospace; --sans:'Syne',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--mono);min-height:100vh;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow:hidden}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background-image:linear-gradient(rgba(91,164,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(91,164,255,.03) 1px,transparent 1px);
   background-size:44px 44px}
@@ -66,7 +66,7 @@ select option{background:var(--bg2)}
 .eye:hover{color:var(--text)}
 
 /* BTNS */
-.btn{padding:7px 13px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500}
+.btn{padding:7px 13px;border-radius:6px;font-size:11px;font-family:var(--sans);cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500}
 .btn:hover{border-color:var(--border2);color:var(--text)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
@@ -229,9 +229,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .d-records-inner{padding:10px 12px;border-top:1px solid var(--border)}
 
 /* SELECTABLE DOMAIN NAMES */
-.d-name{user-select:text!important;cursor:pointer}
+.d-name{user-select:text!important;cursor:pointer;font-family:var(--mono)}
 .d-row-head{user-select:none;cursor:pointer}
-.d-row-head .d-name{user-select:text;cursor:pointer}
+.d-row-head .d-name{user-select:text;cursor:pointer;font-family:var(--mono)}
+/* Keep mono for technical data */
+.dns-tbl td,.dns-tbl th,.type-tag,.terminal,.log-line{font-family:var(--mono)}
+.nav-item{font-family:var(--sans)}
 
 /* LH BULK BAR */
 .lh-bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px;margin-bottom:8px}
@@ -624,7 +627,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
           <div class="card-head">
             <span>🌐</span><span class="card-title">Мои домены в LuxHost</span>
             <span class="card-meta" id="lh-domains-cnt">—</span>
-            <button class="btn btn-sm" style="margin-left:8px" onclick="lhSelectAll()">☑ Все</button>
+            <button class="btn btn-sm btn-primary" style="margin-left:8px" onclick="lhDeployAll()" title="Подключить все домены без CF к Cloudflare">🚀 Все → CF</button>
+            <button class="btn btn-sm" onclick="lhSelectAll()">☑ Все</button>
             <button class="btn btn-sm" onclick="lhGetDomains()">🔄 Обновить</button>
           </div>
           <div class="card-body" style="padding:10px 12px;max-height:700px;overflow-y:auto">
@@ -659,6 +663,7 @@ let expandedDomainId=null, selectedDomains=new Set();
 let lhDomains=[];
 let lhExpandedDomainId=null;
 let lhSelectedDomains=new Set();
+let lhCfRecs={}; // domName → {zoneId, domId, recs[]}
 let cfZones=[], cfZoneRecs={}, cfExpandedZoneId=null;
 let domainComments={};
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
@@ -1887,43 +1892,56 @@ function lhRenderDomains(){
 
     html += '<div class="d-records" id="lh-dr-'+domId+'"><div class="d-records-inner">';
 
-    // NS Section
-    html += '<div style="margin-bottom:10px">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<span style="font-size:11px;color:var(--text2);font-weight:600">Nameservers</span>';
-    html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')">✏️ Изменить NS</button>';
-    html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
+    // ── CF STATUS BAR ──────────────────────────────────────────────
+    const cfStatusBg = isCfNs ? 'rgba(62,207,142,.07)' : 'rgba(136,136,168,.05)';
+    const cfStatusBorder = isCfNs ? 'rgba(62,207,142,.2)' : 'var(--border)';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:7px;margin-bottom:10px;background:'+cfStatusBg+';border:1px solid '+cfStatusBorder+';flex-wrap:wrap">';
+    if(isCfNs){
+      html += '<span style="font-size:13px">✅</span>';
+      html += '<span style="font-size:12px;font-weight:700;color:var(--green)">Cloudflare подключён</span>';
+      html += '<span style="font-size:10px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ns.join(' · ')+'</span>';
+      html += '<button class="btn btn-sm" onclick="lhApplyCfTemplate(\''+domId+'\',\''+name+'\')" title="Применить шаблон DNS к CF зоне">📋 Шаблон</button>';
+      html += '<button class="btn btn-sm" onclick="lhLoadCfRecs(\''+domId+'\',\''+name+'\')" title="Загрузить DNS из Cloudflare">🔄 DNS</button>';
+      html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')" title="Изменить NS вручную">✏️ NS</button>';
+    } else {
+      html += '<span style="font-size:13px">❌</span>';
+      html += '<span style="font-size:12px;font-weight:700;color:var(--text2)">Не подключён к CF</span>';
+      if(hasNs) html += '<span style="font-size:10px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">NS: '+nsStr+'</span>';
+      else html += '<span style="flex:1"></span>';
+      html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns" style="color:var(--blue);border-color:rgba(91,164,255,.3)">☁ NS → CF</button>';
+      html += '<button class="btn btn-sm btn-primary" onclick="lhConnectToCF(\''+domId+'\',\''+name+'\')">🚀 Подключить к CF</button>';
+    }
     html += '</div>';
-    if(hasNs){
-      html += '<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--blue)">';
-      ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
+
+    // ── CF DNS RECORDS ─────────────────────────────────────────────
+    if(isCfNs){
+      html += '<div id="lh-cf-recs-'+domId+'">';
+      const cfCached = lhCfRecs[name];
+      if(cfCached){
+        html += lhRenderCfTable(cfCached, name);
+      } else {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;margin-bottom:6px">'
+          + '<span style="font-size:11px;color:var(--text3)">DNS записи из Cloudflare не загружены</span>'
+          + '<button class="btn btn-sm btn-primary" onclick="lhLoadCfRecs(\''+domId+'\',\''+name+'\')">📋 Загрузить</button>'
+          + '</div>';
+      }
       html += '</div>';
     } else {
-      html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">NS не установлены (используются записи регистратора)</div>';
+      // Non-CF: show NS edit option
+      html += '<div style="padding:6px 0;margin-bottom:6px">';
+      if(hasNs){
+        html += '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Текущие NS:</div>';
+        html += '<div style="font-size:11px;color:var(--blue);font-family:var(--mono)">';
+        ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:11px;color:var(--text3)">NS не установлены (записи регистратора активны)</div>';
+      }
+      html += '</div>';
     }
-    html += '</div>';
 
-    // DNS Records Section
-    html += '<div style="border-top:1px solid var(--border);padding-top:10px">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<span style="font-size:11px;color:var(--text2);font-weight:600">DNS записи</span>';
-    if(hasNs) html += '<span style="font-size:10px;color:var(--yellow);background:rgba(255,211,42,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(255,211,42,.2)">⚠ NS установлены — записи ниже не активны</span>';
-    html += '<button class="btn btn-sm btn-primary" onclick="lhAddRecord(\''+domId+'\',\''+name+'\')">+ Запись</button>';
-    html += '<button class="btn btn-sm" onclick="lhLoadRecords(\''+domId+'\')">🔄</button>';
-    html += '</div>';
-
-    // Records
-    html += '<div id="lh-recs-'+domId+'"'+(hasNs?' style="opacity:.4;pointer-events:none"':'')+' >';
-    if(records.length){
-      html += lhRenderRecordsTable(records, domId, name);
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">Записи не загружены. Нажмите 🔄 для загрузки.</div>';
-    }
-    html += '</div>';
-    html += '</div>';
-
-    // Comment section
-    html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">';
+    // ── COMMENT ────────────────────────────────────────────────────
+    html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">';
     html += '<div class="dom-comment" data-comment-for="'+name+'" onclick="editComment(\''+name+'\')">';
     html += '<span class="dom-comment-icon">💬</span>';
     html += '<span class="dom-comment-text'+(lhCmt?'':' empty')+'">'+(lhCmt || 'Добавить комментарий...')+'</span>';
@@ -1941,6 +1959,282 @@ function lhRenderDomains(){
     if(arr) arr.classList.add('open');
   }
   lhUpdateBulkBar();
+}
+
+// ══ CF DNS TABLE (inside LuxHost) ══
+function lhRenderCfTable(cfData, domName){
+  const zoneId=cfData.zoneId, domId=cfData.domId, recs=cfData.recs||[];
+  let html='';
+  if(!recs.length){
+    html='<div style="font-size:11px;color:var(--text3);padding:4px 0;margin-bottom:6px">Нет DNS записей в CF зоне</div>';
+  } else {
+    html='<table class="dns-tbl" style="margin-bottom:8px"><thead><tr><th>Тип</th><th>Имя</th><th>Значение</th><th>TTL</th><th>Proxy</th><th></th></tr></thead><tbody>';
+    recs.forEach(function(r){
+      const sn=r.name.replace('.'+domName,'');
+      const dn=sn===domName?'@':sn;
+      const vs=r.content.length>40?r.content.slice(0,37)+'...':r.content;
+      const cp=['A','AAAA','CNAME'].includes(r.type);
+      html+='<tr>';
+      html+='<td><span class="type-tag">'+r.type+'</span></td>';
+      html+='<td style="color:var(--blue)">'+dn+'</td>';
+      html+='<td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+r.content.replace(/"/g,'&quot;')+'">'+vs+'</td>';
+      html+='<td style="color:var(--text3)">'+(r.ttl===1?'Авто':r.ttl)+'</td>';
+      if(cp){
+        html+='<td><div class="proxy-tog" onclick="lhCfToggleProxy(\''+zoneId+'\',\''+r.id+'\',\''+domName+'\','+(!r.proxied)+')">';
+        html+='<span class="cloud '+(r.proxied?'on':'')+'">☁️</span>';
+        html+='<span style="font-size:10px;color:'+(r.proxied?'var(--accent)':'var(--text3)')+'">'+(r.proxied?'вкл':'выкл')+'</span>';
+        html+='</div></td>';
+      } else {
+        html+='<td><span style="font-size:10px;color:var(--text3)">—</span></td>';
+      }
+      html+='<td style="white-space:nowrap">';
+      html+='<span style="cursor:pointer;color:var(--text3);padding:2px 5px;border-radius:4px;font-size:12px" onclick="lhEditCfRec(\''+zoneId+'\',\''+r.id+'\',\''+domName+'\')">✏️</span>';
+      html+='<span class="del-btn" onclick="lhDeleteCfRec(\''+zoneId+'\',\''+r.id+'\',\''+domName+'\')">✕</span>';
+      html+='</td></tr>';
+    });
+    html+='</tbody></table>';
+  }
+  html+='<button class="btn btn-sm btn-primary" onclick="lhShowAddCfRec(\''+zoneId+'\',\''+domName+'\')">+ Запись</button>';
+  return html;
+}
+
+async function lhLoadCfRecs(domId, domName){
+  const token=v('cf-tok');
+  if(!token){ log('warn','['+domName+'] CF токен не настроен'); return; }
+  const el=document.getElementById('lh-cf-recs-'+domId);
+  if(el) el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:4px">⟳ Загрузка CF записей...</div>';
+  const listRes=await cfReq(token,'GET','/zones?name='+domName);
+  if(!listRes.success||!listRes.result||!listRes.result[0]){
+    if(el) el.innerHTML='<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Зона не найдена в CF для '+domName+'</div>';
+    log('warn','['+domName+'] Зона не найдена в CF');
+    return;
+  }
+  const zone=listRes.result[0], zoneId=zone.id;
+  const recsRes=await cfReq(token,'GET','/zones/'+zoneId+'/dns_records?per_page=100');
+  const recs=recsRes.success?recsRes.result:[];
+  lhCfRecs[domName]={zoneId,domId,recs};
+  if(el) el.innerHTML=lhRenderCfTable(lhCfRecs[domName],domName);
+  log('ok','['+domName+'] CF DNS записей: '+recs.length);
+}
+
+async function lhConnectToCF(domId, domName){
+  const token=v('cf-tok'), account=v('cf-acc');
+  if(!token||!account){ await uiWarn('Настройте CF API Token и Account ID в разделе «Настройки»','CF не настроен'); go('settings'); return; }
+  const ok=await uiConfirm(
+    'Для домена <b>'+domName+'</b> будет выполнено:<br><br>'
+    +'1. Создание зоны в Cloudflare<br>'
+    +'2. Применение шаблона DNS ('+(tplRecs.length)+' записей)<br>'
+    +'3. Смена NS на Cloudflare<br><br>'
+    +'<span style="font-size:11px;color:var(--text3)">Требуется JWT Token для смены NS</span>',
+    'Подключить к Cloudflare?',{icon:'🚀',okText:'Подключить'}
+  );
+  if(!ok) return;
+  log('info','['+domName+'] 🚀 Подключение к CF...');
+  // Step 1: Find or create CF zone
+  let zoneId,nsServers;
+  const listRes=await cfReq(token,'GET','/zones?name='+domName);
+  if(listRes.success&&listRes.result&&listRes.result[0]){
+    zoneId=listRes.result[0].id; nsServers=listRes.result[0].name_servers;
+    log('ok','['+domName+'] Зона найдена: '+zoneId);
+  } else {
+    const zoneRes=await cfReq(token,'POST','/zones',{name:domName,account:{id:account},jump_start:false});
+    if(!zoneRes.success){ await uiError('Ошибка CF зоны: '+(zoneRes.errors?.[0]?.message||'?'),'Ошибка'); return; }
+    zoneId=zoneRes.result.id; nsServers=zoneRes.result.name_servers;
+    log('ok','['+domName+'] Зона создана: '+zoneId);
+  }
+  // Step 2: Apply template
+  if(tplRecs.length){
+    for(const rec of tplRecs){
+      await cfReq(token,'POST','/zones/'+zoneId+'/dns_records',{type:rec.type,name:rec.name,content:rec.value,ttl:rec.ttl,proxied:rec.proxied});
+    }
+    log('ok','['+domName+'] Шаблон применён: '+tplRecs.length+' записей');
+  }
+  // Step 3: Set NS
+  const nsOk=await lhChangeNs(domId,domName,nsServers);
+  // Update local cache regardless (NS may propagate later)
+  const d=lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id)===domId; });
+  if(d) d.nameservers=nsServers;
+  lhCfRecs[domName]={zoneId,domId,recs:[]};
+  await lhLoadCfRecs(domId,domName);
+  lhRenderDomains();
+  lhExpandedDomainId=domId;
+  const el=document.getElementById('lh-dr-'+domId);
+  const arr=document.getElementById('lh-da-'+domId);
+  if(el){el.style.transition='none';el.style.maxHeight='5000px';}
+  if(arr) arr.classList.add('open');
+  if(nsOk){
+    await uiSuccess('Домен <b>'+domName+'</b> подключён к CF!<br>NS: '+nsServers.join(', '),'Готово ✅');
+  } else {
+    await uiWarn('Зона CF создана, шаблон применён, но <b>NS не удалось сменить автоматически</b>.<br><br>NS для ручной установки:<br><b>'+nsServers.join('<br>')+'</b>','Частично выполнено');
+  }
+}
+
+async function lhApplyCfTemplate(domId, domName){
+  if(!tplRecs.length){ await uiWarn('Шаблон DNS пуст. Добавьте записи в разделе «Шаблон DNS»','Пустой шаблон'); return; }
+  const token=v('cf-tok');
+  if(!token){ await uiWarn('Настройте CF API Token','CF не настроен'); return; }
+  // Find zone (from cache or API)
+  let zoneId=lhCfRecs[domName]?.zoneId;
+  if(!zoneId){
+    const listRes=await cfReq(token,'GET','/zones?name='+domName);
+    if(!listRes.success||!listRes.result||!listRes.result[0]){ await uiError('Зона CF не найдена. Сначала подключите домен.','Нет зоны'); return; }
+    zoneId=listRes.result[0].id;
+  }
+  const ok=await uiConfirm('Добавить '+tplRecs.length+' DNS записей из шаблона в CF зону?','Применить шаблон?',{okText:'Применить'});
+  if(!ok) return;
+  let added=0;
+  for(const rec of tplRecs){
+    const res=await cfReq(token,'POST','/zones/'+zoneId+'/dns_records',{type:rec.type,name:rec.name,content:rec.value,ttl:rec.ttl,proxied:rec.proxied});
+    if(res.success) added++;
+    else log('warn','['+domName+'] '+rec.type+': '+(res.errors?.[0]?.message||'ошибка'));
+  }
+  log('ok','['+domName+'] Шаблон применён: '+added+'/'+tplRecs.length);
+  await lhLoadCfRecs(domId,domName);
+}
+
+async function lhCfToggleProxy(zoneId, recId, domName, newVal){
+  const token=v('cf-tok');
+  const res=await cfReq(token,'PATCH','/zones/'+zoneId+'/dns_records/'+recId,{proxied:newVal});
+  if(res.success){
+    const cached=lhCfRecs[domName]; if(!cached) return;
+    const rec=cached.recs.find(function(r){ return r.id===recId; });
+    if(rec) rec.proxied=newVal;
+    const el=document.getElementById('lh-cf-recs-'+cached.domId);
+    if(el) el.innerHTML=lhRenderCfTable(cached,domName);
+  } else { log('err','Proxy: '+(res.errors?.[0]?.message||'ошибка')); }
+}
+
+function lhShowAddCfRec(zoneId, domName){
+  const cached=lhCfRecs[domName]; if(!cached) return;
+  const domId=cached.domId;
+  const container=document.getElementById('lh-cf-recs-'+domId); if(!container) return;
+  if(document.getElementById('lh-cfa-'+domId)) return;
+  const h='<div id="lh-cfa-'+domId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 90px 1fr 60px auto auto;border-top:1px solid var(--border);padding-top:8px;margin-top:6px">'
+    +'<div class="field"><div class="add-lbl">Тип</div><select id="lh-cfat-'+domId+'"><option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option><option>TXT</option></select></div>'
+    +'<div class="field"><div class="add-lbl">Имя</div><input type="text" id="lh-cfah-'+domId+'" value="@" placeholder="@"></div>'
+    +'<div class="field"><div class="add-lbl">Значение</div><input type="text" id="lh-cfav-'+domId+'" placeholder="1.2.3.4"></div>'
+    +'<div class="field"><div class="add-lbl">TTL</div><input type="number" id="lh-cfal-'+domId+'" value="1" min="1"></div>'
+    +'<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">Proxy</div><label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="lh-cfap-'+domId+'" checked style="width:auto;accent-color:var(--accent)"><span style="font-size:10px;color:var(--accent)">вкл</span></label></div>'
+    +'<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="lhSubmitCfRec(\''+zoneId+'\',\''+domName+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-cfa-'+domId+'\').remove()">✕</button></div></div>'
+    +'</div>';
+  container.insertAdjacentHTML('beforeend',h);
+  document.getElementById('lh-cfav-'+domId).focus();
+}
+
+async function lhSubmitCfRec(zoneId, domName){
+  const token=v('cf-tok');
+  const cached=lhCfRecs[domName]; if(!cached) return;
+  const domId=cached.domId;
+  const type=(document.getElementById('lh-cfat-'+domId).value||'A').toUpperCase();
+  const name=document.getElementById('lh-cfah-'+domId).value.trim()||'@';
+  const content=document.getElementById('lh-cfav-'+domId).value.trim();
+  const ttl=parseInt(document.getElementById('lh-cfal-'+domId).value)||1;
+  const proxied=document.getElementById('lh-cfap-'+domId).checked;
+  if(!content) return;
+  const body={type,name:name==='@'?domName:name,content,ttl};
+  if(['A','AAAA','CNAME'].includes(type)) body.proxied=proxied;
+  const res=await cfReq(token,'POST','/zones/'+zoneId+'/dns_records',body);
+  if(res.success){ log('ok','['+domName+'] Запись добавлена'); await lhLoadCfRecs(domId,domName); }
+  else { log('err','['+domName+'] '+(res.errors?.[0]?.message||'ошибка')); }
+}
+
+function lhEditCfRec(zoneId, recId, domName){
+  const cached=lhCfRecs[domName]; if(!cached) return;
+  const rec=cached.recs.find(function(r){ return r.id===recId; }); if(!rec) return;
+  const domId=cached.domId;
+  const sn=rec.name.replace('.'+domName,'');
+  const dn=sn===domName?'@':sn;
+  const cp=['A','AAAA','CNAME'].includes(rec.type);
+  const container=document.getElementById('lh-cf-recs-'+domId); if(!container) return;
+  if(document.getElementById('lh-cfe-'+domId)) document.getElementById('lh-cfe-'+domId).remove();
+  const h='<div id="lh-cfe-'+domId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 100px 1fr 60px auto auto;border:1px solid var(--accent);border-radius:6px;padding:8px;margin-top:6px;background:var(--bg3)">'
+    +'<div class="field"><div class="add-lbl">Тип</div><select id="lh-cfet-'+domId+'"><option'+(rec.type==='A'?' selected':'')+'>A</option><option'+(rec.type==='AAAA'?' selected':'')+'>AAAA</option><option'+(rec.type==='CNAME'?' selected':'')+'>CNAME</option><option'+(rec.type==='MX'?' selected':'')+'>MX</option><option'+(rec.type==='TXT'?' selected':'')+'>TXT</option></select></div>'
+    +'<div class="field"><div class="add-lbl">Имя</div><input type="text" id="lh-cfen-'+domId+'" value="'+dn+'"></div>'
+    +'<div class="field"><div class="add-lbl">Значение</div><input type="text" id="lh-cfev-'+domId+'" value="'+rec.content.replace(/"/g,'&quot;')+'"></div>'
+    +'<div class="field"><div class="add-lbl">TTL</div><input type="number" id="lh-cfel-'+domId+'" value="'+rec.ttl+'" min="1"></div>'
+    +'<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">Proxy</div><label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="lh-cfep-'+domId+'"'+(rec.proxied?' checked':'')+' style="width:auto;accent-color:var(--accent)"'+(cp?'':' disabled')+'><span style="font-size:10px;color:var(--accent)">'+(cp?'':'—')+'</span></label></div>'
+    +'<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="lhSubmitCfEdit(\''+zoneId+'\',\''+recId+'\',\''+domName+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-cfe-'+domId+'\').remove()">✕</button></div></div>'
+    +'</div>';
+  container.insertAdjacentHTML('beforeend',h);
+  document.getElementById('lh-cfev-'+domId).focus();
+}
+
+async function lhSubmitCfEdit(zoneId, recId, domName){
+  const token=v('cf-tok');
+  const cached=lhCfRecs[domName]; if(!cached) return;
+  const domId=cached.domId;
+  const type=(document.getElementById('lh-cfet-'+domId).value||'A').toUpperCase();
+  const name=document.getElementById('lh-cfen-'+domId).value.trim()||'@';
+  const content=document.getElementById('lh-cfev-'+domId).value.trim();
+  const ttl=parseInt(document.getElementById('lh-cfel-'+domId).value)||1;
+  const proxied=document.getElementById('lh-cfep-'+domId).checked;
+  if(!content) return;
+  const body={type,name:name==='@'?domName:name,content,ttl};
+  if(['A','AAAA','CNAME'].includes(type)) body.proxied=proxied;
+  const res=await cfReq(token,'PUT','/zones/'+zoneId+'/dns_records/'+recId,body);
+  if(res.success){ log('ok','['+domName+'] Запись обновлена'); await lhLoadCfRecs(domId,domName); }
+  else { log('err','['+domName+'] '+(res.errors?.[0]?.message||'ошибка')); }
+}
+
+async function lhDeleteCfRec(zoneId, recId, domName){
+  const cached=lhCfRecs[domName]; if(!cached) return;
+  const rec=cached.recs.find(function(r){ return r.id===recId; }); if(!rec) return;
+  const sn=rec.name.replace('.'+domName,'');
+  const ok=await uiConfirm('Удалить '+rec.type+' '+(sn===domName?'@':sn)+' → '+rec.content+'?','Удалить CF запись?',{danger:true,okText:'Удалить'});
+  if(!ok) return;
+  const token=v('cf-tok');
+  const res=await cfReq(token,'DELETE','/zones/'+zoneId+'/dns_records/'+recId);
+  if(res.success){ log('ok','['+domName+'] CF запись удалена'); await lhLoadCfRecs(cached.domId,domName); }
+  else { log('err','['+domName+'] '+(res.errors?.[0]?.message||'ошибка')); }
+}
+
+async function lhDeployAll(){
+  const token=v('cf-tok'), account=v('cf-acc');
+  if(!token||!account){ await uiWarn('Настройте CF API Token и Account ID','CF не настроен'); go('settings'); return; }
+  const notCf=lhDomains.filter(function(d){
+    const ns=d.nameservers||d.ns||[];
+    return !ns.length||!ns.join(',').toLowerCase().includes('cloudflare');
+  });
+  if(!notCf.length){ await uiSuccess('Все домены уже подключены к Cloudflare!','Всё готово'); return; }
+  const ok=await uiConfirm(
+    'Будет выполнено для <b>'+notCf.length+'</b> доменов без CF:<br><br>'
+    +'1. Создание зоны в CF<br>2. Применение шаблона DNS ('+(tplRecs.length)+' записей)<br>3. Смена NS на CF<br><br>'
+    +'<span style="font-size:11px;color:var(--text3)">Требуется JWT Token для смены NS</span>',
+    '🚀 Подключить '+notCf.length+' доменов к CF?',{icon:'🚀',okText:'Запустить'}
+  );
+  if(!ok) return;
+  log('info','▶ Деплой '+notCf.length+' доменов → CF...');
+  let done=0, errs=0;
+  for(let i=0;i<notCf.length;i++){
+    const d=notCf[i];
+    const name=d.domain||d.name||'';
+    const domId=d.id||d.domainId||d.domain_id||'';
+    log('info','['+(i+1)+'/'+notCf.length+'] '+name+'...');
+    try{
+      let zoneId,nsServers;
+      const listRes=await cfReq(token,'GET','/zones?name='+name);
+      if(listRes.success&&listRes.result&&listRes.result[0]){
+        zoneId=listRes.result[0].id; nsServers=listRes.result[0].name_servers;
+      } else {
+        const zr=await cfReq(token,'POST','/zones',{name,account:{id:account},jump_start:false});
+        if(!zr.success){ log('err','['+name+'] CF: '+(zr.errors?.[0]?.message||'?')); errs++; continue; }
+        zoneId=zr.result.id; nsServers=zr.result.name_servers;
+        log('ok','['+name+'] Зона создана');
+      }
+      if(tplRecs.length){
+        for(const rec of tplRecs) await cfReq(token,'POST','/zones/'+zoneId+'/dns_records',{type:rec.type,name:rec.name,content:rec.value,ttl:rec.ttl,proxied:rec.proxied});
+        log('ok','['+name+'] '+tplRecs.length+' записей применено');
+      }
+      const nsOk=await lhChangeNs(domId,name,nsServers);
+      if(nsOk){ log('ok','['+name+'] NS → CF ✓'); }
+      else { log('warn','['+name+'] NS не обновлены (сделайте вручную)'); }
+      done++;
+    } catch(e){ log('err','['+name+'] '+e.message); errs++; }
+    await sleep(800);
+  }
+  log('info','■ Деплой завершён — успешно: '+done+', ошибок: '+errs);
+  if(done>0) await uiSuccess('Подключено '+done+' доменов к CF'+(errs?' (ошибок: '+errs+')':''),'Готово');
+  lhGetDomains();
 }
 
 function lhRenderRecordsTable(records, domId, domName){
@@ -1975,6 +2269,16 @@ function lhToggleExpand(domId){
     if(prev) _closePanel(document.getElementById('lh-dr-'+prev),document.getElementById('lh-da-'+prev));
     lhExpandedDomainId=domId;
     _openPanel(document.getElementById('lh-dr-'+domId),document.getElementById('lh-da-'+domId));
+    // Auto-load CF DNS records if domain has CF NS and not yet cached
+    const d=lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id)===domId; });
+    if(d){
+      const name=d.domain||d.name||d.id;
+      const ns=d.nameservers||d.ns||[];
+      const isCfNs=ns.length&&ns.join(',').toLowerCase().includes('cloudflare');
+      if(isCfNs&&!lhCfRecs[name]&&v('cf-tok')){
+        lhLoadCfRecs(domId,name);
+      }
+    }
   }
 }
 
