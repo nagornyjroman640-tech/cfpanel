@@ -1396,8 +1396,8 @@ function go(page){
   if(page==='deploy') updateDeployInfo();
   if(go._lhTimer){clearInterval(go._lhTimer);go._lhTimer=null;}
   if(page==='luxhost'){
-    if(!go._lhLoaded){go._lhLoaded=true;lhGetDomains();}
-    go._lhTimer=setInterval(lhGetDomains,60000);
+    if(!go._lhLoaded){go._lhLoaded=true;lhGetDomains();lhGetBalance();}
+    go._lhTimer=setInterval(function(){lhGetDomains();lhGetBalance();},60000);
   }
   if(page==='cfzones'&&!go._cfzLoaded){go._cfzLoaded=true;cfzLoad();}
 }
@@ -1991,7 +1991,7 @@ function lhRenderDomains(){
     if(lhCmt) html += '<span data-comment-preview="'+name+'" style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+lhCmt.replace(/"/g,'&quot;')+'">💬 '+lhCmt+'</span>';
     else html += '<span data-comment-preview="'+name+'" style="display:none"></span>';
     if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
-    if(isCfNs) html += '<span style="font-size:10px;color:var(--accent);background:rgba(246,130,31,.12);padding:1px 6px;border-radius:3px;border:1px solid rgba(246,130,31,.25)">☁ CF</span>';
+    if(isCfNs){const _nf=lhCfRecs[name]&&lhCfRecs[name].notFound;html+='<span id="lh-cfbadge-'+domId+'" style="font-size:10px;color:'+(_nf?'var(--red)':'var(--accent)')+';background:'+(_nf?'rgba(255,79,106,.12)':'rgba(246,130,31,.12)')+';padding:1px 6px;border-radius:3px;border:1px solid '+(_nf?'rgba(255,79,106,.25)':'rgba(246,130,31,.25)')+'">'+'☁ CF</span>';}
     else if(hasNs) html += '<span style="font-size:10px;color:var(--blue);background:rgba(91,164,255,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(91,164,255,.2)">NS</span>';
     html += '<span class="d-expand" id="lh-da-'+domId+'">▶</span>';
     html += '</div>';
@@ -2023,7 +2023,9 @@ function lhRenderDomains(){
     if(isCfNs){
       html += '<div id="lh-cf-recs-'+domId+'">';
       const cfCached = lhCfRecs[name];
-      if(cfCached){
+      if(cfCached && cfCached.notFound){
+        html += '<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Домен не найден в Cloudflare. Нажмите 🚀 Подключить к CF</div>';
+      } else if(cfCached){
         html += lhRenderCfTable(cfCached, name);
       } else {
         html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;margin-bottom:6px">'
@@ -2058,12 +2060,11 @@ function lhRenderDomains(){
     }
 
     // ── COMMENT ────────────────────────────────────────────────────
-    html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">';
-    html += '<div class="dom-comment" data-comment-for="'+name+'" onclick="editComment(\''+name+'\')">';
+    html += '<div class="dom-comment" style="margin-top:8px" data-comment-for="'+name+'" onclick="editComment(\''+name+'\')">';
     html += '<span class="dom-comment-icon">💬</span>';
     html += '<span class="dom-comment-text'+(lhCmt?'':' empty')+'">'+(lhCmt || 'Добавить комментарий...')+'</span>';
     html += '<span class="dom-comment-edit">✏️</span>';
-    html += '</div></div>';
+    html += '</div>';
 
     html += '</div></div>'; // d-records-inner + d-records
     html += '</div>'; // d-row
@@ -2137,7 +2138,11 @@ async function lhLoadCfRecs(domId, domName){
   if(el) el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:4px">⟳ Загрузка CF записей...</div>';
   const listRes=await cfReq(token,'GET','/zones?name='+domName);
   if(!listRes.success||!listRes.result||!listRes.result[0]){
+    lhCfRecs[domName]={notFound:true,domId};
     if(el) el.innerHTML='<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Домен не найден в Cloudflare. Нажмите 🚀 Подключить к CF</div>';
+    // Update badge color inline without full re-render
+    var badge=document.getElementById('lh-cfbadge-'+domId);
+    if(badge){badge.style.color='var(--red)';badge.style.background='rgba(255,79,106,.12)';badge.style.borderColor='rgba(255,79,106,.25)';}
     log('warn','['+domName+'] Домен не найден в Cloudflare');
     return;
   }
@@ -3214,12 +3219,11 @@ function cfzRender(){
     }
     html+='</div>';
     // Comment at bottom
-    html+='<div style="border-top:1px solid var(--border);padding-top:7px;margin-top:10px">';
-    html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')">';
+    html+='<div class="dom-comment" style="margin-top:10px" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')">';
     html+='<span class="dom-comment-icon">💬</span>';
     html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
     html+='<span class="dom-comment-edit">✏️</span>';
-    html+='</div></div>';
+    html+='</div>';
     html+='</div></div>'; // cfz-body-inner + cfz-body
 
     html+='</div>';
