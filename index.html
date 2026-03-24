@@ -2140,10 +2140,8 @@ async function lhLoadCfRecs(domId, domName){
   if(!listRes.success||!listRes.result||!listRes.result[0]){
     lhCfRecs[domName]={notFound:true,domId};
     if(el) el.innerHTML='<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Домен не найден в Cloudflare. Нажмите 🚀 Подключить к CF</div>';
-    // Update badge color inline without full re-render
-    var badge=document.getElementById('lh-cfbadge-'+domId);
-    if(badge){badge.style.color='var(--red)';badge.style.background='rgba(255,79,106,.12)';badge.style.borderColor='rgba(255,79,106,.25)';}
     log('warn','['+domName+'] Домен не найден в Cloudflare');
+    lhRenderDomains();
     return;
   }
   const zone=listRes.result[0], zoneId=zone.id;
@@ -2703,8 +2701,11 @@ async function lhLoadRecords(domId){
   const data = await lhReq('GET', '/public/api/domains/'+domId+'/records');
   let records = [];
   if(Array.isArray(data)) records = data;
-  else if(data && data.records) records = data.records;
-  else if(data && data.data) records = data.data;
+  else if(data && Array.isArray(data.records)) records = data.records;
+  else if(data && Array.isArray(data.data)) records = data.data;
+  else if(data && Array.isArray(data.result)) records = data.result;
+  else if(data && Array.isArray(data.items)) records = data.items;
+  if(!records.length && data) log('warn','['+domId+'] Неизвестный формат ответа: '+Object.keys(data).join(', '));
 
   // Update cached domain records
   const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
@@ -2723,9 +2724,10 @@ async function lhLoadRecords(domId){
 
 function lhAddRecord(domId, domName){
   var container = document.getElementById('lh-recs-'+domId);
-  if(!container) return;
-  // Check if form already exists
-  if(document.getElementById('lh-add-form-'+domId)) return;
+  if(!container){ log('err','['+domName+'] Контейнер записей не найден (id: lh-recs-'+domId+')'); return; }
+  // If form already exists — scroll it into view
+  var existing = document.getElementById('lh-add-form-'+domId);
+  if(existing){ existing.scrollIntoView({block:'nearest'}); return; }
   var formHtml = '<div id="lh-add-form-'+domId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 90px 1fr 60px auto;border-top:1px solid var(--border);padding-top:8px;margin-top:6px">';
   formHtml += '<div class="field"><div class="add-lbl">Тип</div><select id="lh-add-type-'+domId+'"><option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option><option>TXT</option></select></div>';
   formHtml += '<div class="field"><div class="add-lbl">Имя</div><input type="text" id="lh-add-host-'+domId+'" value="@" placeholder="@"></div>';
@@ -2734,18 +2736,27 @@ function lhAddRecord(domId, domName){
   formHtml += '<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="lhSubmitAddRecord(\''+domId+'\',\''+domName+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-add-form-'+domId+'\').remove()">✕</button></div></div>';
   formHtml += '</div>';
   container.insertAdjacentHTML('beforeend', formHtml);
+  log('info', '['+domName+'] Форма добавления записи открыта');
   var valInput = document.getElementById('lh-add-val-'+domId);
-  if(valInput) valInput.focus();
+  if(valInput){ valInput.focus(); valInput.scrollIntoView({block:'nearest'}); }
 }
 
 async function lhSubmitAddRecord(domId, domName){
-  var type = (document.getElementById('lh-add-type-'+domId).value||'A').toUpperCase();
-  var host = document.getElementById('lh-add-host-'+domId).value.trim()||'@';
-  var value = document.getElementById('lh-add-val-'+domId).value.trim();
-  var ttl = parseInt(document.getElementById('lh-add-ttl-'+domId).value)||0;
-  if(!value){ return; }
+  var typeEl=document.getElementById('lh-add-type-'+domId);
+  var hostEl=document.getElementById('lh-add-host-'+domId);
+  var valEl=document.getElementById('lh-add-val-'+domId);
+  var ttlEl=document.getElementById('lh-add-ttl-'+domId);
+  if(!typeEl||!valEl){ log('err','['+domName+'] Форма не найдена'); return; }
+  var type=(typeEl.value||'A').toUpperCase();
+  var host=(hostEl?hostEl.value.trim():'')||'@';
+  var value=valEl.value.trim();
+  var ttl=parseInt(ttlEl?ttlEl.value:0)||0;
+  if(!value){ await uiWarn('Введите значение записи (IP адрес или имя хоста)', 'Пустое значение'); return; }
 
+  var btn=document.querySelector('#lh-add-form-'+domId+' .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='...';}
   log('info', '['+domName+'] Добавляю '+type+' '+host+' → '+value);
+
   const data = await lhReq('POST', '/public/api/domains/setrecord', {
     domainId: domId,
     type: type,
@@ -2754,11 +2765,18 @@ async function lhSubmitAddRecord(domId, domName){
     ttl: ttl
   });
 
-  if(data && !data.error){
-    log('ok', '['+domName+'] Запись добавлена');
+  if(btn){btn.disabled=false;btn.textContent='✓';}
+
+  const ok = data && (data.success || data.status==='ok' || data.status==='success' || (!data.error && !data.errors && data.success!==false));
+  if(ok){
+    log('ok', '['+domName+'] Запись добавлена: '+type+' '+host+' → '+value);
+    var form=document.getElementById('lh-add-form-'+domId);
+    if(form) form.remove();
     await lhLoadRecords(domId);
   } else {
-    log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
+    var errMsg = data ? (data.error||data.message||data.msg||JSON.stringify(data)) : 'нет ответа от сервера';
+    log('err', '['+domName+'] Ошибка добавления: '+errMsg);
+    await uiError('Не удалось добавить запись: '+errMsg, 'Ошибка API');
   }
 }
 
