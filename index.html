@@ -53,12 +53,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 /* INPUTS */
 input[type=email],input[type=password],input[type=text],input[type=number],textarea,select{
   width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;
-  color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 11px;outline:none;transition:border-color .15s}
+  color:var(--text);font-family:var(--mono);font-size:13px;padding:9px 12px;outline:none;transition:border-color .15s}
 input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 textarea{resize:vertical;line-height:1.65}
 select option{background:var(--bg2)}
 .field{display:flex;flex-direction:column;gap:5px}
-.field-label{font-size:11px;color:var(--text2);font-weight:500}
+.field-label{font-size:12px;color:var(--text2);font-weight:600}
 .field-hint{font-size:10px;color:var(--text3);margin-top:2px}
 .tok-wrap{position:relative}
 .tok-wrap input{padding-right:36px}
@@ -66,17 +66,17 @@ select option{background:var(--bg2)}
 .eye:hover{color:var(--text)}
 
 /* BTNS */
-.btn{padding:7px 13px;border-radius:6px;font-size:11px;font-family:var(--sans);cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500}
+.btn{padding:8px 15px;border-radius:6px;font-size:13px;font-family:var(--sans);cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500}
 .btn:hover{border-color:var(--border2);color:var(--text)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
 .btn-primary:hover:not(:disabled){background:var(--accent2);border-color:var(--accent2)}
-.btn-full{width:100%;justify-content:center;padding:11px;font-size:13px}
+.btn-full{width:100%;justify-content:center;padding:12px;font-size:14px}
 .btn-ghost{background:transparent;border-color:transparent}
 .btn-ghost:hover{background:var(--bg3);border-color:var(--border)}
 .btn-danger{color:var(--red);border-color:rgba(255,79,106,.25)}
 .btn-danger:hover{background:rgba(255,79,106,.08);border-color:var(--red)}
-.btn-sm{padding:4px 9px;font-size:10px;border-radius:5px}
+.btn-sm{padding:5px 11px;font-size:11px;border-radius:5px}
 
 /* APP */
 #app{display:none;position:relative;z-index:1;height:100vh;flex-direction:row}
@@ -94,8 +94,8 @@ select option{background:var(--bg2)}
 .logout{cursor:pointer;color:var(--text3);font-size:13px;padding:3px;border-radius:4px;transition:all .15s}
 .logout:hover{color:var(--red);background:rgba(255,79,106,.1)}
 nav{flex:1;padding:8px;overflow-y:auto}
-.nav-sec{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;padding:9px 10px 4px}
-.nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text2);transition:all .15s;border:1px solid transparent;margin-bottom:2px;user-select:none}
+.nav-sec{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;padding:9px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text2);transition:all .15s;border:1px solid transparent;margin-bottom:2px;user-select:none}
 .nav-item:hover{background:var(--bg3);color:var(--text)}
 .nav-item.active{background:rgba(246,130,31,.13);color:var(--accent);border-color:rgba(246,130,31,.2)}
 .nav-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
@@ -112,8 +112,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 /* MAIN */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .topbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
-.pg-title{font-family:var(--sans);font-weight:700;font-size:15px}
-.pg-sub{font-size:11px;color:var(--text3);margin-left:5px}
+.pg-title{font-family:var(--sans);font-weight:700;font-size:17px}
+.pg-sub{font-size:13px;color:var(--text3);margin-left:5px}
 .tb-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .content{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
 .tab-pane{display:none;flex-direction:column;gap:14px}
@@ -123,8 +123,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 /* CARDS */
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .card-head{padding:12px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.card-title{font-family:var(--sans);font-weight:700;font-size:13px;flex:1}
-.card-meta{font-size:10px;color:var(--text3)}
+.card-title{font-family:var(--sans);font-weight:700;font-size:14px;flex:1}
+.card-meta{font-size:12px;color:var(--text3)}
 .card-body{padding:14px}
 
 /* STATS */
@@ -140,29 +140,29 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .d-row-head{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg3);cursor:pointer;user-select:none}
 .d-row-head:hover{background:var(--bg4)}
 .d-checkbox{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
-.d-name{flex:1;color:var(--blue);font-weight:500;font-size:12px}
+.d-name{flex:1;color:var(--blue);font-weight:600;font-size:13px}
 .d-zone{font-size:10px;color:var(--text3)}
 .d-expand{font-size:11px;color:var(--text3);padding:2px 5px;transition:transform .25s ease}
 .d-expand.open{transform:rotate(90deg)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 
-.pill{padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
+.pill{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
 .pill-pending{background:rgba(255,211,42,.12);color:var(--yellow);border:1px solid rgba(255,211,42,.25)}
 .pill-running{background:rgba(91,164,255,.12);color:var(--blue);border:1px solid rgba(91,164,255,.25)}
 .pill-done{background:rgba(62,207,142,.12);color:var(--green);border:1px solid rgba(62,207,142,.25)}
 .pill-error{background:rgba(255,79,106,.12);color:var(--red);border:1px solid rgba(255,79,106,.25)}
 .del-btn{cursor:pointer;color:var(--text3);padding:2px 5px;border-radius:4px;transition:all .15s;font-size:12px}
 .del-btn:hover{color:var(--red);background:rgba(255,79,106,.1)}
-.empty{text-align:center;padding:26px;color:var(--text3);font-size:11px}
+.empty{text-align:center;padding:26px;color:var(--text3);font-size:13px}
 .empty-icon{font-size:24px;margin-bottom:8px}
 
 /* DNS TABLE */
-.dns-tbl{width:100%;border-collapse:collapse;font-size:11px}
-.dns-tbl th{text-align:left;padding:6px 9px;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);border-bottom:1px solid var(--border);font-weight:500}
-.dns-tbl td{padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:middle}
+.dns-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.dns-tbl th{text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);border-bottom:1px solid var(--border);font-weight:500}
+.dns-tbl td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 .dns-tbl tr:last-child td{border-bottom:none}
 .dns-tbl tr:hover td{background:rgba(255,255,255,.012)}
-.type-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--bg4);border:1px solid var(--border2);color:var(--text2)}
+.type-tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:var(--bg4);border:1px solid var(--border2);color:var(--text2)}
 .proxy-tog{display:flex;align-items:center;gap:5px;cursor:pointer}
 .cloud{font-size:15px;opacity:.25;filter:grayscale(1);transition:all .2s}
 .cloud.on{opacity:1;filter:none}
@@ -171,7 +171,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
 
 /* ADD ROW */
 .add-row{display:grid;gap:6px;align-items:end;grid-template-columns:80px 90px 1fr 60px auto auto;border-top:1px solid var(--border);padding-top:10px;margin-top:6px}
-.add-lbl{font-size:10px;color:var(--text3);margin-bottom:2px}
+.add-lbl{font-size:11px;color:var(--text3);margin-bottom:2px}
 
 /* BULK PANEL */
 .bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px}
@@ -204,12 +204,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .modal-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
 
 /* COMMENTS */
-.dom-comment{display:flex;align-items:center;gap:6px;margin-top:6px;padding:5px 10px;background:rgba(91,164,255,.05);border:1px solid rgba(91,164,255,.12);border-radius:6px;font-size:11px;cursor:pointer;transition:all .15s}
+.dom-comment{display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:3px 8px;background:rgba(91,164,255,.05);border:1px solid rgba(91,164,255,.12);border-radius:5px;font-size:11px;cursor:pointer;transition:all .15s;max-width:420px}
 .dom-comment:hover{border-color:rgba(91,164,255,.3);background:rgba(91,164,255,.08)}
-.dom-comment-icon{color:var(--text3);font-size:13px;flex-shrink:0}
-.dom-comment-text{color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dom-comment-icon{color:var(--text3);font-size:12px;flex-shrink:0}
+.dom-comment-text{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
 .dom-comment-text.empty{color:var(--text3);font-style:italic}
-.dom-comment-edit{color:var(--text3);font-size:10px;padding:2px 5px;border-radius:3px;transition:all .15s;flex-shrink:0}
+.dom-comment-edit{color:var(--text3);font-size:10px;padding:1px 4px;border-radius:3px;transition:all .15s;flex-shrink:0}
 .dom-comment-edit:hover{color:var(--accent);background:rgba(246,130,31,.1)}
 
 /* CF ZONE ITEMS */
@@ -218,11 +218,16 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .cfz-head:hover{background:var(--bg4)}
 .cfz-body{overflow:hidden;max-height:0;background:var(--bg)}
 .cfz-body-inner{padding:12px;border-top:1px solid var(--border)}
-.cfz-status{font-size:9px;padding:2px 7px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.cfz-status{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
 .cfz-status.active{background:rgba(62,207,142,.12);color:var(--green);border:1px solid rgba(62,207,142,.25)}
 .cfz-status.pending{background:rgba(255,211,42,.12);color:var(--yellow);border:1px solid rgba(255,211,42,.25)}
 .cfz-status.other{background:rgba(136,136,168,.12);color:var(--text2);border:1px solid rgba(136,136,168,.25)}
 .cfz-add-row{display:grid;gap:6px;align-items:end;grid-template-columns:80px 100px 1fr 60px auto auto;border-top:1px solid var(--border);padding-top:10px;margin-top:8px}
+/* CF filter bar */
+.cf-filter-bar{display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.cf-filter-btn{padding:4px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text3);transition:all .15s;font-family:var(--sans)}
+.cf-filter-btn:hover{border-color:var(--border2);color:var(--text)}
+.cf-filter-btn.active{background:rgba(246,130,31,.15);border-color:rgba(246,130,31,.4);color:var(--accent);font-weight:600}
 
 /* SMOOTH EXPAND */
 .d-records{overflow:hidden;max-height:0;background:var(--bg)}
@@ -358,12 +363,13 @@ nav{flex:1;padding:8px;overflow-y:auto}
       <div class="nav-sec">Управление</div>
       <div class="nav-item" onclick="go('template')"><span class="nav-icon">📋</span>Шаблон DNS<span class="nav-badge" id="nb-t">0</span></div>
       <div class="nav-sec">Cloudflare</div>
-      <div class="nav-item" onclick="go('cfzones')"><span class="nav-icon">☁️</span>CF Зоны<span class="nav-badge" id="nb-cfz">—</span></div>
+      <div class="nav-item" onclick="go('cfzones')"><span class="nav-icon">☁️</span>CF Домены<span class="nav-badge" id="nb-cfz">—</span></div>
       <div class="nav-sec">Регистратор</div>
       <div class="nav-item active" onclick="go('luxhost')"><span class="nav-icon">🛒</span>LuxHost<span class="nav-badge" id="nb-lh">—</span></div>
       <div class="nav-sec">Система</div>
       <div class="nav-item" onclick="go('logs')"><span class="nav-icon">📟</span>Логи<span class="nav-badge" id="nb-l">0</span></div>
       <div class="nav-item" onclick="go('settings')"><span class="nav-icon">⚙️</span>Настройки</div>
+      <div class="nav-item" onclick="go('account')"><span class="nav-icon">👤</span>Аккаунт</div>
     </nav>
     <div class="api-box"><div class="api-row"><div class="api-dot" id="api-dot"></div>Cloudflare API</div><div class="api-sub" id="api-sub">не настроен</div></div>
   </aside>
@@ -543,6 +549,25 @@ nav{flex:1;padding:8px;overflow-y:auto}
         </div>
       </div>
 
+      <!-- ACCOUNT TAB -->
+      <div class="tab-pane" id="tab-account">
+        <div class="card">
+          <div class="card-head"><span>🔐</span><span class="card-title">Изменить пароль</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:13px;max-width:400px">
+            <div class="field"><label class="field-label">Новый пароль</label><div class="tok-wrap"><input type="password" id="acc-pass" placeholder="Минимум 6 символов"><span class="eye" onclick="toggleEye('acc-pass',this)">👁</span></div></div>
+            <div class="field"><label class="field-label">Повторите пароль</label><div class="tok-wrap"><input type="password" id="acc-pass2" placeholder="Повторите пароль"><span class="eye" onclick="toggleEye('acc-pass2',this)">👁</span></div></div>
+            <button class="btn btn-primary" style="align-self:flex-start" onclick="changePassword()">🔐 Изменить пароль</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>📧</span><span class="card-title">Информация об аккаунте</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;color:var(--text2)">Email: <span id="acc-email" style="color:var(--text)">—</span></div>
+            <button class="btn btn-sm btn-danger" style="align-self:flex-start" onclick="confirmLogout()">⏻ Выйти из аккаунта</button>
+          </div>
+        </div>
+      </div>
+
       <!-- CF ZONES TAB -->
       <div class="tab-pane" id="tab-cfzones">
         <div class="stats" style="grid-template-columns:repeat(3,1fr)">
@@ -552,13 +577,19 @@ nav{flex:1;padding:8px;overflow-y:auto}
         </div>
         <div class="card">
           <div class="card-head">
-            <span>☁️</span><span class="card-title">Зоны Cloudflare</span>
+            <span>☁️</span><span class="card-title">Домены Cloudflare</span>
             <span class="card-meta" id="cfz-cnt">—</span>
             <input type="text" id="cfz-filter" placeholder="Фильтр..." style="margin-left:auto;width:180px;padding:4px 9px;font-size:11px">
             <button class="btn btn-sm btn-primary" style="margin-left:8px" onclick="cfzLoad()">🔄 Загрузить</button>
           </div>
-          <div class="card-body" style="padding:10px 12px;max-height:700px;overflow-y:auto">
-            <div id="cfz-list"><div class="empty"><div class="empty-icon">☁️</div>Нажмите «Загрузить» для получения зон из Cloudflare</div></div>
+          <div class="card-body" style="padding:10px 12px">
+            <div class="cf-filter-bar" id="cfz-filter-bar" style="display:none">
+              <span style="font-size:12px;color:var(--text3)">Фильтр:</span>
+              <button class="cf-filter-btn active" onclick="cfzSetFilter('all',this)">Все</button>
+              <button class="cf-filter-btn" onclick="cfzSetFilter('active',this)">✅ Активные</button>
+              <button class="cf-filter-btn" onclick="cfzSetFilter('pending',this)">⏳ Ожидают NS</button>
+            </div>
+            <div id="cfz-list" style="max-height:calc(100vh - 280px);overflow-y:auto"><div class="empty"><div class="empty-icon">☁️</div>Нажмите «Загрузить» для получения зон из Cloudflare</div></div>
           </div>
         </div>
       </div>
@@ -588,7 +619,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
                 <input type="text" id="lh-search-input" placeholder="example.com" style="flex:1" onkeydown="if(event.key==='Enter')lhSearch()">
                 <button class="btn btn-primary" onclick="lhSearch()">🔍 Проверить</button>
               </div>
-              <div id="lh-search-results" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+              <div id="lh-search-results" style="max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
             </div>
           </div>
         </div>
@@ -642,6 +673,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
               <button class="btn btn-sm" onclick="lhDeselectAll()">☐ Снять</button>
               <span style="margin-left:auto;cursor:pointer;color:var(--text3);font-size:13px" onclick="lhDeselectAll()">✕</span>
             </div>
+            <div class="cf-filter-bar" id="lh-filter-bar" style="display:none;margin-bottom:8px">
+              <span style="font-size:12px;color:var(--text3)">Показать:</span>
+              <button class="cf-filter-btn active" onclick="lhSetFilter('all',this)">Все</button>
+              <button class="cf-filter-btn" onclick="lhSetFilter('cf',this)">☁ CF</button>
+              <button class="cf-filter-btn" onclick="lhSetFilter('nocf',this)">❌ Без CF</button>
+            </div>
             <div id="lh-domains-list"><div class="empty"><div class="empty-icon">🌍</div>Нажмите «Обновить»</div></div>
           </div>
         </div>
@@ -671,11 +708,12 @@ let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
 const PAGES={
   domains:{title:'Домены',sub:'Список доменов с DNS записями'},
   template:{title:'Шаблон DNS',sub:'Применяется к новым доменам автоматически'},
-  deploy:{title:'Деплой',sub:'Создание зон и применение DNS записей'},
-  cfzones:{title:'CF Зоны',sub:'Управление зонами и DNS записями в Cloudflare'},
+  deploy:{title:'Деплой',sub:'Создание доменов и применение DNS записей'},
+  cfzones:{title:'CF Домены',sub:'Управление доменами и DNS записями в Cloudflare'},
   luxhost:{title:'LuxHost',sub:'Покупка доменов · Смена NS · Управление'},
   logs:{title:'Логи',sub:'История операций'},
-  settings:{title:'Настройки',sub:'CF API и конфигурация'}
+  settings:{title:'Настройки',sub:'CF API и конфигурация'},
+  account:{title:'Аккаунт',sub:'Управление учётной записью'}
 };
 
 // ══ BOOT ══
@@ -719,6 +757,7 @@ function showApp(){
   document.getElementById('app').classList.add('visible');
   document.getElementById('u-email').textContent=user.email;
   document.getElementById('fb-pid').textContent=firebase.app().options.projectId||'—';
+  const accEmail=document.getElementById('acc-email'); if(accEmail) accEmail.textContent=user.email;
   subscribeAll(); loadCF();
   loadCart(); lhRenderCart();
   log('ok','Вошёл: '+user.email);
@@ -1060,7 +1099,7 @@ function editComment(domainName){
       + 'onblur="saveComment(this)" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=\''+(current.replace(/'/g,"\\'")||'')+'\';this.blur()}" '
       + 'style="flex:1;background:var(--bg);border:1px solid var(--accent);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none">';
     var inp = el.querySelector('input');
-    if(inp) inp.focus();
+    if(inp){ inp.focus(); var l=inp.value.length; inp.setSelectionRange(l,l); }
   });
 }
 
@@ -1144,10 +1183,33 @@ async function toggleTplProxy(id,cur){ await db.collection('template').doc(id).u
 
 async function editTplRec(id){
   const r=tplRecs.find(x=>x.id===id); if(!r)return;
-  const newVal=prompt('Новое значение (IP):',r.value); if(!newVal)return;
-  const newName=prompt('Имя:',r.name); if(newName===null)return;
-  await db.collection('template').doc(id).update({value:newVal,name:newName||'@'});
-  log('ok',`Шаблон обновлён: ${r.type} ${newName} → ${newVal}`);
+  const ov=document.getElementById('ui-modal-ov');
+  document.getElementById('ui-modal-icon').textContent='✏️';
+  document.getElementById('ui-modal-title').textContent='Редактировать запись '+r.type;
+  const body=document.getElementById('ui-modal-body');
+  body.innerHTML='<div style="display:flex;flex-direction:column;gap:10px">'
+    +'<div class="field"><label class="field-label">Имя</label><input type="text" id="etpl-name" value="'+r.name+'" placeholder="@"></div>'
+    +'<div class="field"><label class="field-label">Значение (IP)</label><input type="text" id="etpl-val" value="'+r.value+'" placeholder="1.2.3.4"></div>'
+    +'</div>';
+  const foot=document.getElementById('ui-modal-foot');
+  foot.innerHTML='';
+  ov.style.display='flex';
+  document.getElementById('etpl-val').focus();
+  await new Promise(function(resolve){
+    const cancel=document.createElement('button'); cancel.className='btn'; cancel.textContent='Отмена';
+    cancel.onclick=function(){ ov.style.display='none'; foot.innerHTML=''; resolve(false); };
+    const ok=document.createElement('button'); ok.className='btn btn-primary'; ok.textContent='Сохранить';
+    ok.onclick=async function(){
+      const newName=document.getElementById('etpl-name').value.trim()||'@';
+      const newVal=document.getElementById('etpl-val').value.trim();
+      ov.style.display='none'; foot.innerHTML='';
+      if(!newVal){ resolve(false); return; }
+      await db.collection('template').doc(id).update({value:newVal,name:newName});
+      log('ok','Шаблон обновлён: '+r.type+' '+newName+' → '+newVal);
+      resolve(true);
+    };
+    foot.appendChild(cancel); foot.appendChild(ok);
+  });
 }
 
 function renderTpl(){
@@ -1841,6 +1903,22 @@ async function autoSetupDomain(domain, domainId){
 }
 
 // ── MY DOMAINS ──
+let lhFilter='all';
+function lhSetFilter(f, btn){
+  lhFilter=f;
+  document.querySelectorAll('#lh-filter-bar .cf-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  lhRenderDomains();
+}
+
+let cfzFilterState='all';
+function cfzSetFilter(f, btn){
+  cfzFilterState=f;
+  document.querySelectorAll('#cfz-filter-bar .cf-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  cfzRender();
+}
+
 async function lhGetDomains(){
   log('info', 'Загрузка доменов LuxHost...');
   const data = await lhReq('GET', '/public/api/domains/list');
@@ -1858,7 +1936,11 @@ async function lhGetDomains(){
 
 function lhRenderDomains(){
   const list = document.getElementById('lh-domains-list');
-  const items = lhDomains;
+  const fb=document.getElementById('lh-filter-bar');
+  if(fb&&lhDomains.length) fb.style.display='flex';
+  let items=lhDomains;
+  if(lhFilter==='cf') items=lhDomains.filter(function(d){ const ns=d.nameservers||d.ns||[]; return ns.length&&ns.join(',').toLowerCase().includes('cloudflare'); });
+  else if(lhFilter==='nocf') items=lhDomains.filter(function(d){ const ns=d.nameservers||d.ns||[]; return !ns.length||!ns.join(',').toLowerCase().includes('cloudflare'); });
   if(!items.length){
     list.innerHTML = '<div class="empty"><div class="empty-icon">🌍</div>Нет доменов</div>';
     lhUpdateBulkBar();
@@ -1902,7 +1984,7 @@ function lhRenderDomains(){
       html += '<span style="font-size:10px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ns.join(' · ')+'</span>';
       html += '<button class="btn btn-sm" onclick="lhApplyCfTemplate(\''+domId+'\',\''+name+'\')" title="Применить шаблон DNS к CF зоне">📋 Шаблон</button>';
       html += '<button class="btn btn-sm" onclick="lhLoadCfRecs(\''+domId+'\',\''+name+'\')" title="Загрузить DNS из Cloudflare">🔄 DNS</button>';
-      html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')" title="Изменить NS вручную">✏️ NS</button>';
+      html += '<button class="btn btn-sm" onclick="lhSetRegistrarNs(\''+domId+'\',\''+name+'\')" title="Вернуть NS регистратора (отключить CF)">↩ NS Рег.</button>';
     } else {
       html += '<span style="font-size:13px">❌</span>';
       html += '<span style="font-size:12px;font-weight:700;color:var(--text2)">Не подключён к CF</span>';
@@ -1959,6 +2041,21 @@ function lhRenderDomains(){
     if(arr) arr.classList.add('open');
   }
   lhUpdateBulkBar();
+}
+
+// ══ DNS VALUE VALIDATION ══
+function validateDnsValue(type, val){
+  if(type==='A'){
+    const ok=/^(\d{1,3}\.){3}\d{1,3}$/.test(val)&&val.split('.').every(function(n){ return parseInt(n)<=255; });
+    if(!ok) return 'Запись A должна содержать корректный IPv4 адрес (например: 185.196.10.1)';
+  }
+  if(type==='AAAA'){
+    if(!/^[0-9a-fA-F:]+$/.test(val)) return 'Запись AAAA должна содержать корректный IPv6 адрес';
+  }
+  if(type==='MX'){
+    if(!val.includes('.')) return 'MX должен содержать имя хоста (например: mail.example.com)';
+  }
+  return null;
 }
 
 // ══ CF DNS TABLE (inside LuxHost) ══
@@ -2130,7 +2227,9 @@ async function lhSubmitCfRec(zoneId, domName){
   const content=document.getElementById('lh-cfav-'+domId).value.trim();
   const ttl=parseInt(document.getElementById('lh-cfal-'+domId).value)||1;
   const proxied=document.getElementById('lh-cfap-'+domId).checked;
-  if(!content) return;
+  if(!content){ await uiWarn('Введите значение записи','Пустое значение'); return; }
+  const valErr=validateDnsValue(type,content);
+  if(valErr){ await uiWarn(valErr,'Неверный формат'); return; }
   const body={type,name:name==='@'?domName:name,content,ttl};
   if(['A','AAAA','CNAME'].includes(type)) body.proxied=proxied;
   const res=await cfReq(token,'POST','/zones/'+zoneId+'/dns_records',body);
@@ -2235,6 +2334,31 @@ async function lhDeployAll(){
   log('info','■ Деплой завершён — успешно: '+done+', ошибок: '+errs);
   if(done>0) await uiSuccess('Подключено '+done+' доменов к CF'+(errs?' (ошибок: '+errs+')':''),'Готово');
   lhGetDomains();
+}
+
+async function lhSetRegistrarNs(domId, domName){
+  const ok=await uiConfirm(
+    'NS домена <b>'+domName+'</b> будут изменены на серверы регистратора LuxHost.<br><br>'
+    +'<span style="color:var(--yellow)">⚠ Cloudflare перестанет работать для этого домена</span>',
+    'Вернуть NS регистратора?',{icon:'↩',okText:'Вернуть'}
+  );
+  if(!ok) return;
+  // Default LuxHost NS
+  const regNs=['ns3.my-ndns.com','ns4.my-ndns.com'];
+  log('info','['+domName+'] Смена NS на регистраторские...');
+  const nsOk=await lhChangeNs(domId,domName,regNs);
+  if(nsOk){
+    const d=lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id)===domId; });
+    if(d) d.nameservers=regNs;
+    delete lhCfRecs[domName];
+    lhRenderDomains();
+    lhExpandedDomainId=domId;
+    const el=document.getElementById('lh-dr-'+domId);
+    const arr=document.getElementById('lh-da-'+domId);
+    if(el){el.style.transition='none';el.style.maxHeight='5000px';}
+    if(arr) arr.classList.add('open');
+    await uiSuccess('NS домена '+domName+' изменены на NS регистратора','Готово');
+  }
 }
 
 function lhRenderRecordsTable(records, domId, domName){
@@ -3010,7 +3134,11 @@ async function cfzLoad(){
 function cfzRender(){
   const list=document.getElementById('cfz-list');
   const filter=(document.getElementById('cfz-filter').value||'').trim().toLowerCase();
-  const filtered=filter?cfZones.filter(z=>z.name.includes(filter)):cfZones;
+  let filtered=filter?cfZones.filter(z=>z.name.includes(filter)):cfZones;
+  if(cfzFilterState==='active') filtered=filtered.filter(function(z){ return z.status==='active'; });
+  else if(cfzFilterState==='pending') filtered=filtered.filter(function(z){ return z.status==='pending'; });
+  const fb=document.getElementById('cfz-filter-bar');
+  if(fb&&cfZones.length) fb.style.display='flex';
 
   if(!filtered.length){
     list.innerHTML='<div class="empty"><div class="empty-icon">☁️</div>'+(cfZones.length?'Нет совпадений':'Нет зон')+'</div>';
@@ -3076,6 +3204,11 @@ function cfzToggle(zoneId){
     if(prev) _closePanel(document.getElementById('cfz-body-'+prev),document.getElementById('cfz-da-'+prev));
     cfExpandedZoneId=zoneId;
     _openPanel(document.getElementById('cfz-body-'+zoneId),document.getElementById('cfz-da-'+zoneId));
+    // Auto-load DNS records if not cached
+    if(!cfZoneRecs[zoneId]){
+      const z=cfZones.find(function(z){ return z.id===zoneId; });
+      if(z) cfzLoadRecs(zoneId,z.name);
+    }
   }
 }
 
@@ -3258,6 +3391,35 @@ async function cfzToggleProxy(zoneId, recId, zoneName, newVal){
 
 
 // ══ UTILS ══
+async function changePassword(){
+  const p1=document.getElementById('acc-pass').value;
+  const p2=document.getElementById('acc-pass2').value;
+  if(!p1||!p2){ await uiWarn('Заполните оба поля','Пустые поля'); return; }
+  if(p1.length<6){ await uiWarn('Пароль должен быть минимум 6 символов','Слишком короткий'); return; }
+  if(p1!==p2){ await uiWarn('Пароли не совпадают','Ошибка'); return; }
+  const ok=await uiConfirm('Вы уверены что хотите изменить пароль?','Изменить пароль?',{okText:'Изменить'});
+  if(!ok) return;
+  try{
+    await user.updatePassword(p1);
+    document.getElementById('acc-pass').value='';
+    document.getElementById('acc-pass2').value='';
+    await uiSuccess('Пароль успешно изменён','Готово');
+    log('ok','Пароль изменён');
+  }catch(e){
+    if(e.code==='auth/requires-recent-login'){
+      await uiError('Для изменения пароля нужно заново войти в аккаунт. Выйдите и войдите снова.','Требуется повторный вход');
+    } else {
+      await uiError(e.message,'Ошибка');
+    }
+    log('err','Смена пароля: '+e.message);
+  }
+}
+
+async function confirmLogout(){
+  const ok=await uiConfirm('Выйти из аккаунта?','Выход',{okText:'Выйти'});
+  if(ok) logout();
+}
+
 function toggleEye(id,btn){ const i=document.getElementById(id); i.type=i.type==='password'?'text':'password'; btn.textContent=i.type==='password'?'👁':'🙈'; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 </script>
