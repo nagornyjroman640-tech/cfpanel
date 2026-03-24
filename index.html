@@ -912,7 +912,7 @@ function renderDomainRecs(d){
 
   // Comment section
   const comment = domainComments[d.name] || '';
-  html+=`<div class="dom-comment" onclick="editComment('${d.name}')">
+  html+=`<div class="dom-comment" data-comment-for="${d.name}" onclick="editComment('${d.name}')">
     <span class="dom-comment-icon">💬</span>
     <span class="dom-comment-text${comment?'':' empty'}">${comment || 'Добавить комментарий...'}</span>
     <span class="dom-comment-edit">✏️</span>
@@ -975,23 +975,28 @@ async function openAddRecModal(domId){
 }
 
 // ══ COMMENTS ══
-async function editComment(domainName){
-  const current = domainComments[domainName] || '';
-  const result = await uiModal({
-    type: 'input',
-    title: 'Комментарий: '+domainName,
-    body: '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Добавьте заметку для себя — к чему относится домен, для какого проекта и т.д.</div>',
-    icon: '💬',
-    okText: 'Сохранить',
-    defaultVal: current
+function editComment(domainName){
+  // Find the comment container and replace with inline input
+  var els = document.querySelectorAll('[data-comment-for="'+domainName+'"]');
+  els.forEach(function(el){
+    var current = domainComments[domainName] || '';
+    el.innerHTML = '<span class="dom-comment-icon">💬</span>'
+      + '<input type="text" class="dom-comment-input" data-domain="'+domainName+'" value="'+current.replace(/"/g,'&quot;')+'" placeholder="Комментарий..." '
+      + 'onblur="saveComment(this)" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=\''+(current.replace(/'/g,"\\'")||'')+'\';this.blur()}" '
+      + 'style="flex:1;background:var(--bg);border:1px solid var(--accent);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none">';
+    var inp = el.querySelector('input');
+    if(inp) inp.focus();
   });
-  if(result === null) return;
+}
+
+async function saveComment(inp){
+  var domainName = inp.dataset.domain;
+  var text = inp.value.trim();
   await db.collection('comments').doc(domainName).set({
-    text: result.trim(),
+    text: text,
     updatedBy: user.email,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
-  log('ok', '['+domainName+'] Комментарий '+(result.trim()?'сохранён':'удалён'));
 }
 
 // ══ BULK APPLY ══
@@ -1819,7 +1824,6 @@ function lhRenderDomains(){
     html += '<span style="font-size:11px;color:var(--text2);font-weight:600">Nameservers</span>';
     html += '<button class="btn btn-sm" onclick="lhEditNs(\''+domId+'\',\''+name+'\')">✏️ Изменить NS</button>';
     html += '<button class="btn btn-sm" data-domain-id="'+domId+'" data-domain-name="'+name+'" data-act="setns">☁ NS → CF</button>';
-    html += '<button class="btn btn-sm btn-danger" onclick="lhClearNs(\''+domId+'\',\''+name+'\')">✕ Сбросить NS</button>';
     html += '</div>';
     if(hasNs){
       html += '<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--blue)">';
@@ -1851,7 +1855,7 @@ function lhRenderDomains(){
 
     // Comment section
     html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">';
-    html += '<div class="dom-comment" onclick="editComment(\''+name+'\')">';
+    html += '<div class="dom-comment" data-comment-for="'+name+'" onclick="editComment(\''+name+'\')">';
     html += '<span class="dom-comment-icon">💬</span>';
     html += '<span class="dom-comment-text'+(lhCmt?'':' empty')+'">'+(lhCmt || 'Добавить комментарий...')+'</span>';
     html += '<span class="dom-comment-edit">✏️</span>';
@@ -2044,20 +2048,35 @@ async function lhLoadRecords(domId){
   log('ok', 'Записей: '+records.length);
 }
 
-async function lhAddRecord(domId, domName){
-  const type = prompt('Тип записи (A/AAAA/CNAME/MX/TXT):', 'A');
-  if(!type) return;
-  const host = prompt('Имя (@ для корня, или субдомен):', '@');
-  if(host === null) return;
-  const value = prompt('Значение (IP или адрес):');
-  if(!value) return;
-  const ttl = parseInt(prompt('TTL (0=Авто):', '0')) || 0;
+function lhAddRecord(domId, domName){
+  var container = document.getElementById('lh-recs-'+domId);
+  if(!container) return;
+  // Check if form already exists
+  if(document.getElementById('lh-add-form-'+domId)) return;
+  var formHtml = '<div id="lh-add-form-'+domId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 90px 1fr 60px auto;border-top:1px solid var(--border);padding-top:8px;margin-top:6px">';
+  formHtml += '<div class="field"><div class="add-lbl">Тип</div><select id="lh-add-type-'+domId+'"><option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option><option>TXT</option></select></div>';
+  formHtml += '<div class="field"><div class="add-lbl">Имя</div><input type="text" id="lh-add-host-'+domId+'" value="@" placeholder="@"></div>';
+  formHtml += '<div class="field"><div class="add-lbl">Значение</div><input type="text" id="lh-add-val-'+domId+'" placeholder="1.2.3.4"></div>';
+  formHtml += '<div class="field"><div class="add-lbl">TTL</div><input type="number" id="lh-add-ttl-'+domId+'" value="0" min="0"></div>';
+  formHtml += '<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="lhSubmitAddRecord(\''+domId+'\',\''+domName+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-add-form-'+domId+'\').remove()">✕</button></div></div>';
+  formHtml += '</div>';
+  container.insertAdjacentHTML('beforeend', formHtml);
+  var valInput = document.getElementById('lh-add-val-'+domId);
+  if(valInput) valInput.focus();
+}
+
+async function lhSubmitAddRecord(domId, domName){
+  var type = (document.getElementById('lh-add-type-'+domId).value||'A').toUpperCase();
+  var host = document.getElementById('lh-add-host-'+domId).value.trim()||'@';
+  var value = document.getElementById('lh-add-val-'+domId).value.trim();
+  var ttl = parseInt(document.getElementById('lh-add-ttl-'+domId).value)||0;
+  if(!value){ return; }
 
   log('info', '['+domName+'] Добавляю '+type+' '+host+' → '+value);
   const data = await lhReq('POST', '/public/api/domains/setrecord', {
     domainId: domId,
-    type: type.toUpperCase(),
-    host: host || '@',
+    type: type,
+    host: host,
     value: value,
     ttl: ttl
   });
@@ -2067,30 +2086,47 @@ async function lhAddRecord(domId, domName){
     await lhLoadRecords(domId);
   } else {
     log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
-    await uiError(data ? (data.error||data.message||'Ошибка') : 'Нет ответа', 'Ошибка добавления');
   }
 }
 
-async function lhEditRecord(domId, domName, recIdx){
-  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+function lhEditRecord(domId, domName, recIdx){
+  var dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
   if(!dom || !dom.records || !dom.records[recIdx]) return;
-  const r = dom.records[recIdx];
-  const recId = r.id || r.recordId || r.record_id || '';
+  var r = dom.records[recIdx];
+  var recId = r.id || r.recordId || r.record_id || '';
+  var rHost = r.host || r.name || '@';
+  var rVal = r.value || r.content || r.data || '';
+  var rTtl = r.ttl || 0;
 
-  const type = prompt('Тип:', r.type);
-  if(!type) return;
-  const host = prompt('Имя:', r.host || r.name || '@');
-  if(host === null) return;
-  const value = prompt('Значение:', r.value || r.content || r.data || '');
+  // Replace the table row with inline edit form
+  var container = document.getElementById('lh-recs-'+domId);
+  if(!container) return;
+  if(document.getElementById('lh-edit-form-'+domId)) document.getElementById('lh-edit-form-'+domId).remove();
+
+  var formHtml = '<div id="lh-edit-form-'+domId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 90px 1fr 60px auto;border:1px solid var(--accent);border-radius:6px;padding:8px;margin-top:6px;background:var(--bg3)">';
+  formHtml += '<div class="field"><div class="add-lbl">Тип</div><select id="lh-edit-type-'+domId+'"><option'+(r.type==='A'?' selected':'')+'>A</option><option'+(r.type==='AAAA'?' selected':'')+'>AAAA</option><option'+(r.type==='CNAME'?' selected':'')+'>CNAME</option><option'+(r.type==='MX'?' selected':'')+'>MX</option><option'+(r.type==='TXT'?' selected':'')+'>TXT</option></select></div>';
+  formHtml += '<div class="field"><div class="add-lbl">Имя</div><input type="text" id="lh-edit-host-'+domId+'" value="'+rHost+'"></div>';
+  formHtml += '<div class="field"><div class="add-lbl">Значение</div><input type="text" id="lh-edit-val-'+domId+'" value="'+rVal.replace(/"/g,'&quot;')+'"></div>';
+  formHtml += '<div class="field"><div class="add-lbl">TTL</div><input type="number" id="lh-edit-ttl-'+domId+'" value="'+rTtl+'" min="0"></div>';
+  formHtml += '<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="lhSubmitEditRecord(\''+domId+'\',\''+domName+'\',\''+recId+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-edit-form-'+domId+'\').remove()">✕</button></div></div>';
+  formHtml += '</div>';
+  container.insertAdjacentHTML('beforeend', formHtml);
+  document.getElementById('lh-edit-val-'+domId).focus();
+}
+
+async function lhSubmitEditRecord(domId, domName, recId){
+  var type = (document.getElementById('lh-edit-type-'+domId).value||'A').toUpperCase();
+  var host = document.getElementById('lh-edit-host-'+domId).value.trim()||'@';
+  var value = document.getElementById('lh-edit-val-'+domId).value.trim();
+  var ttl = parseInt(document.getElementById('lh-edit-ttl-'+domId).value)||0;
   if(!value) return;
-  const ttl = parseInt(prompt('TTL (0=Авто):', r.ttl || 0)) || 0;
 
   log('info', '['+domName+'] Редактирую запись...');
-  const data = await lhReq('POST', '/public/api/domains/editrecord', {
+  var data = await lhReq('POST', '/public/api/domains/editrecord', {
     domainId: domId,
     recordId: recId,
-    type: type.toUpperCase(),
-    host: host || '@',
+    type: type,
+    host: host,
     value: value,
     ttl: ttl
   });
@@ -2272,18 +2308,39 @@ async function lhChangeNs(domId, domName, nsArr){
   return false;
 }
 
-async function lhEditNs(domId, domName){
-  const dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
-  const currentNs = dom && (dom.nameservers || dom.ns) ? (dom.nameservers || dom.ns).join('\n') : '';
-  const input = prompt('Nameservers (по одному на строку):', currentNs);
-  if(input === null) return;
-  const nsArr = input.split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s; });
-  if(!nsArr.length){ await uiWarn('Введите хотя бы один NS сервер', 'Пусто'); return; }
+function lhEditNs(domId, domName){
+  var dom = lhDomains.find(function(d){ return (d.id||d.domainId||d.domain_id) === domId; });
+  var currentNs = dom && (dom.nameservers || dom.ns) ? (dom.nameservers || dom.ns).join('\n') : '';
+
+  // Find the NS display area and replace with edit form
+  // We'll look for a parent container in the expanded panel
+  var row = document.querySelector('[data-domain-id="'+domId+'"]');
+  if(!row) return;
+  var panel = row.closest('.d-row');
+  if(!panel) return;
+  var nsArea = panel.querySelector('.d-records');
+  if(!nsArea) return;
+
+  // Insert form at top of NS area
+  if(document.getElementById('lh-ns-form-'+domId)) return;
+  var formHtml = '<div id="lh-ns-form-'+domId+'" style="padding:8px;background:var(--bg3);border:1px solid var(--accent);border-radius:6px;margin-bottom:10px">';
+  formHtml += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Изменить NS (по одному на строку)</div>';
+  formHtml += '<textarea id="lh-ns-input-'+domId+'" rows="3" style="width:100%;margin-bottom:6px">'+currentNs+'</textarea>';
+  formHtml += '<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" onclick="lhSubmitNs(\''+domId+'\',\''+domName+'\')">✓ Сохранить</button><button class="btn btn-sm" onclick="document.getElementById(\'lh-ns-form-'+domId+'\').remove()">✕ Отмена</button></div>';
+  formHtml += '</div>';
+  nsArea.insertAdjacentHTML('afterbegin', formHtml);
+  document.getElementById('lh-ns-input-'+domId).focus();
+}
+
+async function lhSubmitNs(domId, domName){
+  var input = document.getElementById('lh-ns-input-'+domId).value;
+  var nsArr = input.split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+  if(!nsArr.length){ return; }
 
   log('info', '['+domName+'] Меняем NS → '+nsArr.join(', '));
-  const ok = await lhChangeNs(domId, domName, nsArr);
+  var ok = await lhChangeNs(domId, domName, nsArr);
   if(ok){
-    await uiSuccess('NS обновлены: '+nsArr.join(', '), 'NS изменены');
+    log('ok', '['+domName+'] NS обновлены');
     await lhGetDomains();
   }
 }
@@ -2473,7 +2530,7 @@ function cfzRender(){
     if(exp){
       html+='<div class="cfz-body open" id="cfz-body-'+z.id+'">';
       // Comment
-      html+='<div class="dom-comment" onclick="editComment(\''+z.name+'\')" style="margin-bottom:10px">';
+      html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')" style="margin-bottom:10px">';
       html+='<span class="dom-comment-icon">💬</span>';
       html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
       html+='<span class="dom-comment-edit">✏️</span>';
