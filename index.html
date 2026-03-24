@@ -117,7 +117,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .tb-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .content{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
 .tab-pane{display:none;flex-direction:column;gap:14px}
-.tab-pane.active{display:flex}
+.tab-pane.active{display:flex;animation:tabIn .22s ease}
+@keyframes tabIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* CARDS */
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
@@ -215,8 +216,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .cfz-row{border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:4px;animation:fadeIn .18s ease}
 .cfz-head{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg3);cursor:pointer;user-select:none;transition:background .12s}
 .cfz-head:hover{background:var(--bg4)}
-.cfz-body{display:none;padding:12px;background:var(--bg);border-top:1px solid var(--border)}
-.cfz-body.open{display:block}
+.cfz-body{overflow:hidden;max-height:0;background:var(--bg)}
+.cfz-body-inner{padding:12px;border-top:1px solid var(--border)}
 .cfz-status{font-size:9px;padding:2px 7px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
 .cfz-status.active{background:rgba(62,207,142,.12);color:var(--green);border:1px solid rgba(62,207,142,.25)}
 .cfz-status.pending{background:rgba(255,211,42,.12);color:var(--yellow);border:1px solid rgba(255,211,42,.25)}
@@ -224,13 +225,13 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .cfz-add-row{display:grid;gap:6px;align-items:end;grid-template-columns:80px 100px 1fr 60px auto auto;border-top:1px solid var(--border);padding-top:10px;margin-top:8px}
 
 /* SMOOTH EXPAND */
-.d-records{max-height:0;overflow:hidden;transition:max-height .35s ease, padding .25s ease;padding:0 12px;background:var(--bg);border-top:0px solid var(--border)}
-.d-records.open{max-height:2000px;padding:10px 12px;border-top:1px solid var(--border)}
+.d-records{overflow:hidden;max-height:0;background:var(--bg)}
+.d-records-inner{padding:10px 12px;border-top:1px solid var(--border)}
 
 /* SELECTABLE DOMAIN NAMES */
-.d-name{user-select:text!important;cursor:text}
-.d-row-head{user-select:none}
-.d-row-head .d-name{user-select:text;cursor:text}
+.d-name{user-select:text!important;cursor:pointer}
+.d-row-head{user-select:none;cursor:pointer}
+.d-row-head .d-name{user-select:text;cursor:pointer}
 
 /* LH BULK BAR */
 .lh-bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px;margin-bottom:8px}
@@ -653,12 +654,12 @@ let db, auth, user;
 let domains=[], tplRecs=[], cfCfg={}, logs=[], running=false;
 let newTplProxy=true, bulkProxy=true, bulkRecs=[];
 let unsub={};
-let expandedDomains=new Set(), selectedDomains=new Set();
+let expandedDomainId=null, selectedDomains=new Set();
 
 let lhDomains=[];
-let lhExpandedDomains=new Set();
+let lhExpandedDomainId=null;
 let lhSelectedDomains=new Set();
-let cfZones=[], cfZoneRecs={}, cfExpandedZones=new Set();
+let cfZones=[], cfZoneRecs={}, cfExpandedZoneId=null;
 let domainComments={};
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
 
@@ -839,7 +840,45 @@ async function removeDomain(id,name){ await db.collection('domains').doc(id).del
 async function clearAll(){ const clrOk = await uiConfirm('Все домены будут удалены из панели.', 'Очистить список?', {danger:true, okText:'Удалить'});
   if(!clrOk) return; sync(true); const snap=await db.collection('domains').get(); const b=db.batch(); snap.docs.forEach(d=>b.delete(d.ref)); await b.commit(); sync(false); log('warn','Все домены удалены'); }
 
-function toggleExpand(id){ expandedDomains.has(id)?expandedDomains.delete(id):expandedDomains.add(id); renderDomains(); }
+// ══ PANEL ANIMATION ══
+function _openPanel(el,arrowEl){
+  if(!el)return;
+  if(arrowEl) arrowEl.classList.add('open');
+  el.style.transition='none';
+  el.style.maxHeight='0';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    el.style.transition='max-height .38s cubic-bezier(.4,0,.2,1)';
+    el.style.maxHeight=el.scrollHeight+'px';
+    el.addEventListener('transitionend',function h(){
+      el.removeEventListener('transitionend',h);
+      el.style.transition='none';
+      el.style.maxHeight='5000px';
+    });
+  }));
+}
+function _closePanel(el,arrowEl){
+  if(!el)return;
+  if(arrowEl) arrowEl.classList.remove('open');
+  const h=el.scrollHeight;
+  el.style.transition='none';
+  el.style.maxHeight=h+'px';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    el.style.transition='max-height .38s cubic-bezier(.4,0,.2,1)';
+    el.style.maxHeight='0';
+  }));
+}
+
+function toggleExpand(id){
+  const prev=expandedDomainId;
+  if(prev===id){
+    expandedDomainId=null;
+    _closePanel(document.getElementById('dr-'+id),document.getElementById('da-'+id));
+  } else {
+    if(prev) _closePanel(document.getElementById('dr-'+prev),document.getElementById('da-'+prev));
+    expandedDomainId=id;
+    _openPanel(document.getElementById('dr-'+id),document.getElementById('da-'+id));
+  }
+}
 
 function toggleSelect(id){
   selectedDomains.has(id)?selectedDomains.delete(id):selectedDomains.add(id);
@@ -861,8 +900,9 @@ async function deleteSelected(){
   if(!delOk) return;
   sync(true); const b=db.batch();
   selectedDomains.forEach(id=>b.delete(db.collection('domains').doc(id)));
+  const delCount=selectedDomains.size;
   await b.commit(); selectedDomains.clear(); sync(false); updateBulkBar();
-  log('warn',`Удалено ${selectedDomains.size} доменов`);
+  log('warn',`Удалено ${delCount} доменов`);
 }
 
 function renderDomains(){
@@ -874,7 +914,6 @@ function renderDomains(){
   else{
     list.innerHTML=domains.map(d=>{
       const sel=selectedDomains.has(d.id);
-      const exp=expandedDomains.has(d.id);
       const cls={pending:'pill-pending',running:'pill-running',done:'pill-done',error:'pill-error'}[d.status]||'pill-pending';
       const lbl={pending:'ожидает',running:'⟳',done:'✓ готово',error:'✗ ошибка'}[d.status]||'ожидает';
       const recs=d.records||[];
@@ -890,18 +929,25 @@ function renderDomains(){
           ${d.err?`<span style="font-size:10px;color:var(--red);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.err}</span>`:''}
           <span style="font-size:10px;color:var(--text3)">${recs.length} записей</span>
           <span class="pill ${cls}">${lbl}</span>
-          <span class="d-expand${exp?' open':''}">▶</span>
+          <span class="d-expand" id="da-${d.id}">▶</span>
           <span class="del-btn" onclick="event.stopPropagation();removeDomain('${d.id}','${d.name}')">✕</span>
         </div>
-        <div class="d-records${exp?' open':''}">
-          ${renderDomainRecs(d)}
+        <div class="d-records" id="dr-${d.id}">
+          <div class="d-records-inner">${renderDomainRecs(d)}</div>
         </div>
       </div>`;
     }).join('');
+    // Restore open panel without animation after re-render
+    if(expandedDomainId){
+      const el=document.getElementById('dr-'+expandedDomainId);
+      const arr=document.getElementById('da-'+expandedDomainId);
+      if(el){el.style.transition='none';el.style.maxHeight='5000px';}
+      if(arr) arr.classList.add('open');
+    }
   }
 
   document.getElementById('d-cnt').textContent=`${domains.length} доменов`;
-  document.getElementById('nb-d').textContent=domains.length;
+  const nbD=document.getElementById('nb-d'); if(nbD) nbD.textContent=domains.length;
   ['t','d','e','p'].forEach(k=>document.getElementById('s-'+k).textContent=cnt[k]);
 }
 
@@ -1132,7 +1178,7 @@ function updateDeployInfo(){
   const pend=domains.filter(d=>d.status!=='done');
   if(pend.length){ document.getElementById('dp-sum').textContent=`${pend.length} доменов к деплою`; document.getElementById('dp-det').textContent=`Каждый домен использует свои DNS записи`; }
   else{ document.getElementById('dp-sum').textContent=domains.length?'Все задеплоены':'Нет доменов'; document.getElementById('dp-det').textContent='Добавьте домены'; }
-  document.getElementById('nb-dp').textContent=pend.length||'—';
+  const nbDp=document.getElementById('nb-dp'); if(nbDp) nbDp.textContent=pend.length||'—';
 }
 
 async function startDeploy(){
@@ -1820,7 +1866,6 @@ function lhRenderDomains(){
     const ns = d.nameservers || d.ns || [];
     const nsStr = ns.length ? ns.join(', ') : '—';
     const domId = d.id || d.domainId || d.domain_id || '';
-    const isExpanded = lhExpandedDomains.has(domId);
     const isSelected = lhSelectedDomains.has(domId);
     const hasNs = ns.length > 0;
     const isCfNs = hasNs && nsStr.toLowerCase().includes('cloudflare');
@@ -1831,17 +1876,16 @@ function lhRenderDomains(){
     // Header
     html += '<div class="d-row-head" onclick="lhToggleExpand(\''+domId+'\')">';
     html += '<input type="checkbox" class="d-checkbox" '+(isSelected?'checked':'')+' onclick="event.stopPropagation();lhToggleSelect(\''+domId+'\')">';
-    html += '<span class="d-name" onclick="event.stopPropagation()">'+name+'</span>';
+    html += '<span class="d-name">'+name+'</span>';
     if(lhCmt) html += '<span data-comment-preview="'+name+'" style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+lhCmt.replace(/"/g,'&quot;')+'">💬 '+lhCmt+'</span>';
     else html += '<span data-comment-preview="'+name+'" style="display:none"></span>';
     if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
     if(isCfNs) html += '<span style="font-size:10px;color:var(--accent);background:rgba(246,130,31,.12);padding:1px 6px;border-radius:3px;border:1px solid rgba(246,130,31,.25)">☁ CF</span>';
     else if(hasNs) html += '<span style="font-size:10px;color:var(--blue);background:rgba(91,164,255,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(91,164,255,.2)">NS</span>';
-    html += '<span class="d-expand'+(isExpanded?' open':'')+'">▶</span>';
+    html += '<span class="d-expand" id="lh-da-'+domId+'">▶</span>';
     html += '</div>';
 
-    // Expanded panel (always rendered, visibility controlled by CSS class)
-    html += '<div class="d-records'+(isExpanded?' open':'')+'">';
+    html += '<div class="d-records" id="lh-dr-'+domId+'"><div class="d-records-inner">';
 
     // NS Section
     html += '<div style="margin-bottom:10px">';
@@ -1886,10 +1930,16 @@ function lhRenderDomains(){
     html += '<span class="dom-comment-edit">✏️</span>';
     html += '</div></div>';
 
-    html += '</div>'; // d-records
+    html += '</div></div>'; // d-records-inner + d-records
     html += '</div>'; // d-row
   });
   list.innerHTML = html;
+  if(lhExpandedDomainId){
+    const el=document.getElementById('lh-dr-'+lhExpandedDomainId);
+    const arr=document.getElementById('lh-da-'+lhExpandedDomainId);
+    if(el){el.style.transition='none';el.style.maxHeight='5000px';}
+    if(arr) arr.classList.add('open');
+  }
   lhUpdateBulkBar();
 }
 
@@ -1917,9 +1967,15 @@ function lhRenderRecordsTable(records, domId, domName){
 }
 
 function lhToggleExpand(domId){
-  if(lhExpandedDomains.has(domId)) lhExpandedDomains.delete(domId);
-  else lhExpandedDomains.add(domId);
-  lhRenderDomains();
+  const prev=lhExpandedDomainId;
+  if(prev===domId){
+    lhExpandedDomainId=null;
+    _closePanel(document.getElementById('lh-dr-'+domId),document.getElementById('lh-da-'+domId));
+  } else {
+    if(prev) _closePanel(document.getElementById('lh-dr-'+prev),document.getElementById('lh-da-'+prev));
+    lhExpandedDomainId=domId;
+    _openPanel(document.getElementById('lh-dr-'+domId),document.getElementById('lh-da-'+domId));
+  }
 }
 
 function lhToggleSelect(domId){
@@ -2658,7 +2714,6 @@ function cfzRender(){
   }
 
   list.innerHTML=filtered.map(function(z){
-    const exp=cfExpandedZones.has(z.id);
     const stCls=z.status==='active'?'active':(z.status==='pending'?'pending':'other');
     const stLbl=z.status==='active'?'активна':(z.status==='pending'?'ожидает NS':z.status);
     const ns=(z.name_servers||[]).join(', ');
@@ -2671,41 +2726,53 @@ function cfzRender(){
     else html+='<span data-comment-preview="'+z.name+'" style="display:none"></span>';
     html+='<span class="cfz-status '+stCls+'">'+stLbl+'</span>';
     if(ns) html+='<span style="font-size:10px;color:var(--text3);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ns+'</span>';
-    html+='<span class="d-expand'+(exp?' open':'')+'">▶</span>';
+    html+='<span class="d-expand" id="cfz-da-'+z.id+'">▶</span>';
     html+='</div>';
 
-    if(exp){
-      html+='<div class="cfz-body open" id="cfz-body-'+z.id+'">';
-      // Comment
-      html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')" style="margin-bottom:10px">';
-      html+='<span class="dom-comment-icon">💬</span>';
-      html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
-      html+='<span class="dom-comment-edit">✏️</span>';
-      html+='</div>';
-      // Zone info
-      html+='<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">';
-      html+='<span style="font-size:10px;color:var(--text3)">ID: <span style="color:var(--text2)">'+z.id+'</span></span>';
-      if(z.name_servers) html+='<span style="font-size:10px;color:var(--text3)">NS: <span style="color:var(--blue)">'+z.name_servers.join(', ')+'</span></span>';
-      html+='</div>';
-      // Records container
-      html+='<div id="cfz-recs-'+z.id+'">';
-      if(cfZoneRecs[z.id]){
-        html+=cfzRenderRecs(z.id, z.name);
-      } else {
-        html+='<div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm btn-primary" onclick="cfzLoadRecs(\''+z.id+'\',\''+z.name+'\')">📋 Загрузить DNS записи</button></div>';
-      }
-      html+='</div>';
-      html+='</div>';
+    html+='<div class="cfz-body" id="cfz-body-'+z.id+'"><div class="cfz-body-inner">';
+    // Comment
+    html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')" style="margin-bottom:10px">';
+    html+='<span class="dom-comment-icon">💬</span>';
+    html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
+    html+='<span class="dom-comment-edit">✏️</span>';
+    html+='</div>';
+    // Zone info
+    html+='<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">';
+    html+='<span style="font-size:10px;color:var(--text3)">ID: <span style="color:var(--text2)">'+z.id+'</span></span>';
+    if(z.name_servers) html+='<span style="font-size:10px;color:var(--text3)">NS: <span style="color:var(--blue)">'+z.name_servers.join(', ')+'</span></span>';
+    html+='</div>';
+    // Records container
+    html+='<div id="cfz-recs-'+z.id+'">';
+    if(cfZoneRecs[z.id]){
+      html+=cfzRenderRecs(z.id, z.name);
+    } else {
+      html+='<div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm btn-primary" onclick="cfzLoadRecs(\''+z.id+'\',\''+z.name+'\')">📋 Загрузить DNS записи</button></div>';
     }
+    html+='</div>';
+    html+='</div></div>'; // cfz-body-inner + cfz-body
+
     html+='</div>';
     return html;
   }).join('');
+
+  if(cfExpandedZoneId){
+    const el=document.getElementById('cfz-body-'+cfExpandedZoneId);
+    const arr=document.getElementById('cfz-da-'+cfExpandedZoneId);
+    if(el){el.style.transition='none';el.style.maxHeight='5000px';}
+    if(arr) arr.classList.add('open');
+  }
 }
 
 function cfzToggle(zoneId){
-  if(cfExpandedZones.has(zoneId)) cfExpandedZones.delete(zoneId);
-  else cfExpandedZones.add(zoneId);
-  cfzRender();
+  const prev=cfExpandedZoneId;
+  if(prev===zoneId){
+    cfExpandedZoneId=null;
+    _closePanel(document.getElementById('cfz-body-'+zoneId),document.getElementById('cfz-da-'+zoneId));
+  } else {
+    if(prev) _closePanel(document.getElementById('cfz-body-'+prev),document.getElementById('cfz-da-'+prev));
+    cfExpandedZoneId=zoneId;
+    _openPanel(document.getElementById('cfz-body-'+zoneId),document.getElementById('cfz-da-'+zoneId));
+  }
 }
 
 async function cfzLoadRecs(zoneId, zoneName){
