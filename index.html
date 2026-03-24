@@ -629,7 +629,9 @@ nav{flex:1;padding:8px;overflow-y:auto}
           <div class="card-body" style="padding:10px 12px;max-height:700px;overflow-y:auto">
             <div class="lh-bulk-bar" id="lh-bulk-bar">
               <span>Выбрано: <span style="color:var(--accent);font-weight:600" id="lh-bulk-cnt">0</span> доменов</span>
-              <button class="btn btn-sm btn-primary" onclick="lhBulkDeploy()">🚀 Задеплоить в CF</button>
+              <button class="btn btn-sm btn-primary" onclick="lhBulkDeploy()">🚀 Полный деплой</button>
+              <button class="btn btn-sm" onclick="lhBulkSetNs()" style="color:var(--blue);border-color:rgba(91,164,255,.3)">☁ NS → CF</button>
+              <button class="btn btn-sm" onclick="lhBulkApplyTemplate()" style="color:var(--green);border-color:rgba(62,207,142,.3)">📋 Шаблон → CF</button>
               <button class="btn btn-sm" onclick="lhBulkCopyNames()">📋 Копировать</button>
               <button class="btn btn-sm" onclick="lhSelectAll()">☑ Все</button>
               <button class="btn btn-sm" onclick="lhDeselectAll()">☐ Снять</button>
@@ -1971,12 +1973,12 @@ async function lhBulkDeploy(){
   });
 
   var confirmOk = await uiConfirm(
-    'Для <b>'+selected.length+'</b> доменов будет выполнено:<br><br>'
+    'Для <b>'+selected.length+'</b> доменов будет выполнено ВСЁ:<br><br>'
     +'1. Создание зоны в Cloudflare<br>'
     +'2. Применение DNS записей из шаблона ('+tplRecs.length+' записей)<br>'
     +'3. Смена NS на Cloudflare<br><br>'
-    +'<span style="font-size:11px;color:var(--text3)">Домены у которых зона уже есть — будут пропущены</span>',
-    'Задеплоить '+selected.length+' доменов?',
+    +'<span style="font-size:11px;color:var(--text3)">Если нужно только NS или только шаблон — используйте отдельные кнопки</span>',
+    '🚀 Полный деплой '+selected.length+' доменов?',
     {icon:'🚀', okText:'Задеплоить'}
   );
   if(!confirmOk) return;
@@ -2043,6 +2045,127 @@ async function lhBulkDeploy(){
   if(errs>0 && done===0) await uiError('Не удалось задеплоить ни одного домена. Проверьте логи.', 'Ошибка деплоя');
   lhDeselectAll();
   lhGetDomains();
+}
+
+// ── BULK: NS → CF only ──
+async function lhBulkSetNs(){
+  if(!lhSelectedDomains.size){ return; }
+  var cfToken = v('cf-tok'), cfAccount = v('cf-acc');
+  if(!cfToken || !cfAccount){ await uiWarn('Настройте CF API Token и Account ID','CF не настроен'); go('settings'); return; }
+
+  var selected = [];
+  lhSelectedDomains.forEach(function(id){
+    var d = lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id) === id; });
+    if(d) selected.push(d);
+  });
+
+  var ok = await uiConfirm(
+    'Для <b>'+selected.length+'</b> доменов будет:<br>'
+    +'1. Найдена/создана зона в CF<br>'
+    +'2. NS изменены на Cloudflare<br><br>'
+    +'<span style="color:var(--text3);font-size:11px">DNS записи НЕ будут применены</span>',
+    'NS → CF для '+selected.length+' доменов?',
+    {icon:'☁️', okText:'Применить'}
+  );
+  if(!ok) return;
+
+  log('info', '▶ NS → CF: '+selected.length+' доменов...');
+  var done=0, errs=0;
+
+  for(var i=0; i<selected.length; i++){
+    var d = selected[i];
+    var name = d.domain || d.name || '';
+    var domId = d.id || d.domainId || d.domain_id || '';
+    log('info', '['+(i+1)+'/'+selected.length+'] '+name+'...');
+
+    try{
+      var zoneId=null, nsServers=null;
+      var listRes = await cfReq(cfToken,'GET','/zones?name='+name);
+      if(listRes.success && listRes.result && listRes.result[0]){
+        zoneId = listRes.result[0].id;
+        nsServers = listRes.result[0].name_servers;
+      } else {
+        var zoneRes = await cfReq(cfToken,'POST','/zones',{name:name, account:{id:cfAccount}, jump_start:false});
+        if(zoneRes.success){
+          zoneId = zoneRes.result.id;
+          nsServers = zoneRes.result.name_servers;
+          log('ok', '['+name+'] Зона создана');
+        } else {
+          log('err', '['+name+'] CF: '+(zoneRes.errors?zoneRes.errors[0].message:'ошибка'));
+          errs++; continue;
+        }
+      }
+
+      if(domId && nsServers && nsServers.length){
+        var nsOk = await lhChangeNs(domId, name, nsServers);
+        if(nsOk){ log('ok', '['+name+'] NS → CF ✓'); done++; }
+        else { log('warn', '['+name+'] NS не удалось'); errs++; }
+      }
+    } catch(e){ log('err', '['+name+'] '+e.message); errs++; }
+    await sleep(600);
+  }
+
+  log('info', '■ NS → CF завершён — успешно: '+done+', ошибок: '+errs);
+  lhDeselectAll();
+  lhGetDomains();
+}
+
+// ── BULK: Apply template to CF zones ──
+async function lhBulkApplyTemplate(){
+  if(!lhSelectedDomains.size){ return; }
+  var cfToken = v('cf-tok');
+  if(!cfToken){ await uiWarn('Настройте CF API Token','CF не настроен'); go('settings'); return; }
+  if(!tplRecs.length){ await uiWarn('Шаблон DNS пуст. Добавьте записи в разделе «Шаблон DNS»','Пустой шаблон'); go('template'); return; }
+
+  var selected = [];
+  lhSelectedDomains.forEach(function(id){
+    var d = lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id) === id; });
+    if(d) selected.push(d);
+  });
+
+  var recList = tplRecs.map(function(r){ return r.type+' '+r.name+' → '+r.value+(r.proxied?' ☁️':''); }).join('<br>');
+  var ok = await uiConfirm(
+    'Для <b>'+selected.length+'</b> доменов будут добавлены записи из шаблона:<br><br>'
+    +'<div style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;margin:4px 0">'+recList+'</div><br>'
+    +'<span style="color:var(--text3);font-size:11px">NS НЕ будут изменены. Зона должна уже существовать в CF.</span>',
+    'Применить шаблон к '+selected.length+' доменам?',
+    {icon:'📋', okText:'Применить'}
+  );
+  if(!ok) return;
+
+  log('info', '▶ Шаблон → CF: '+selected.length+' доменов, '+tplRecs.length+' записей...');
+  var done=0, errs=0;
+
+  for(var i=0; i<selected.length; i++){
+    var d = selected[i];
+    var name = d.domain || d.name || '';
+    log('info', '['+(i+1)+'/'+selected.length+'] '+name+'...');
+
+    try{
+      // Find zone
+      var listRes = await cfReq(cfToken,'GET','/zones?name='+name);
+      if(!listRes.success || !listRes.result || !listRes.result[0]){
+        log('err', '['+name+'] Зона не найдена в CF — пропускаю');
+        errs++; continue;
+      }
+      var zoneId = listRes.result[0].id;
+
+      // Apply records
+      for(var j=0; j<tplRecs.length; j++){
+        var rec = tplRecs[j];
+        var res = await cfReq(cfToken,'POST','/zones/'+zoneId+'/dns_records',{
+          type:rec.type, name:rec.name, content:rec.value, ttl:rec.ttl, proxied:rec.proxied
+        });
+        if(res.success) log('ok', '['+name+'] '+rec.type+' '+rec.name+' → '+rec.value);
+        else log('warn', '['+name+'] '+rec.type+': '+(res.errors?.[0]?.message||'ошибка'));
+      }
+      done++;
+    } catch(e){ log('err', '['+name+'] '+e.message); errs++; }
+    await sleep(500);
+  }
+
+  log('info', '■ Шаблон применён — успешно: '+done+', ошибок: '+errs);
+  lhDeselectAll();
 }
 
 async function lhLoadRecords(domId){
