@@ -174,8 +174,8 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .add-lbl{font-size:11px;color:var(--text3);margin-bottom:2px}
 
 /* BULK PANEL */
-.bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px}
-.bulk-bar.show{display:flex}
+.bulk-bar{display:flex;align-items:center;gap:10px;padding:0 14px;background:rgba(246,130,31,.08);border:1px solid transparent;border-radius:8px;font-size:12px;max-height:0;overflow:hidden;opacity:0;transition:max-height .25s ease,opacity .2s ease,padding .25s ease,border-color .25s ease,margin .25s ease;margin-bottom:0}
+.bulk-bar.show{max-height:60px;opacity:1;padding:9px 14px;border-color:rgba(246,130,31,.2);margin-bottom:8px}
 .bulk-count{color:var(--accent);font-weight:600}
 
 /* PROGRESS */
@@ -242,8 +242,12 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .nav-item{font-family:var(--sans)}
 
 /* LH BULK BAR */
-.lh-bulk-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(246,130,31,.08);border:1px solid rgba(246,130,31,.2);border-radius:8px;font-size:12px;margin-bottom:8px}
-.lh-bulk-bar.show{display:flex}
+.lh-bulk-bar{display:flex;align-items:center;gap:10px;padding:0 14px;background:rgba(246,130,31,.08);border:1px solid transparent;border-radius:8px;font-size:12px;max-height:0;overflow:hidden;opacity:0;transition:max-height .25s ease,opacity .2s ease,padding .25s ease,border-color .25s ease,margin .25s ease;margin-bottom:0}
+.lh-bulk-bar.show{max-height:60px;opacity:1;padding:9px 14px;border-color:rgba(246,130,31,.2);margin-bottom:8px}
+/* STICKY FILTER BAR */
+#lh-filter-bar{position:sticky;top:0;z-index:10;background:var(--bg2);padding:6px 0;margin-bottom:0!important}
+/* TABULAR NUMBERS */
+.card-meta,[id^="nb-"],#cfz-total,#cfz-active,#cfz-pending,#lh-bulk-cnt,#bulk-cnt{font-variant-numeric:tabular-nums;font-weight:700}
 
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -929,7 +933,7 @@ function toggleSelect(id){
   renderDomains(); updateBulkBar();
 }
 
-function selectAll(){ domains.forEach(d=>selectedDomains.add(d.id)); renderDomains(); updateBulkBar(); }
+function selectAll(){ if(domains.every(function(d){return selectedDomains.has(d.id);})){selectedDomains.clear();}else{domains.forEach(function(d){selectedDomains.add(d.id);});} renderDomains(); updateBulkBar(); }
 function deselectAll(){ selectedDomains.clear(); renderDomains(); updateBulkBar(); }
 
 function updateBulkBar(){
@@ -1382,10 +1386,12 @@ function go(page){
   const tbr=document.getElementById('tb-right');
   const si=`<span id="sync-ind"></span>`;
   if(page==='domains') tbr.innerHTML=`${si}<button class="btn btn-ghost btn-danger" onclick="clearAll()">🗑 Очистить</button><button class="btn btn-primary" onclick="go('deploy')">🚀 Задеплоить →</button>`;
-  else if(page==='cfzones') tbr.innerHTML=`${si}<button class="btn btn-primary" onclick="cfzLoad()">🔄 Загрузить зоны</button>`;
+  else if(page==='cfzones') tbr.innerHTML=`${si}<button class="btn btn-primary" onclick="cfzLoad()">🔄 Загрузить домены</button>`;
   else if(page==='logs') tbr.innerHTML=`<button class="btn" onclick="exportLogs()">💾 Экспорт</button><button class="btn btn-ghost btn-danger" onclick="clearLogs()">🗑</button>`;
   else tbr.innerHTML=si;
   if(page==='deploy') updateDeployInfo();
+  if(page==='luxhost'&&!go._lhLoaded){go._lhLoaded=true;lhGetDomains();}
+  if(page==='cfzones'&&!go._cfzLoaded){go._cfzLoaded=true;cfzLoad();}
 }
 
 // ══ LOGS ══
@@ -2009,17 +2015,28 @@ function lhRenderDomains(){
       }
       html += '</div>';
     } else {
-      // Non-CF: show NS edit option
-      html += '<div style="padding:6px 0;margin-bottom:6px">';
+      // Non-CF: show current NS
       if(hasNs){
         html += '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Текущие NS:</div>';
-        html += '<div style="font-size:11px;color:var(--blue);font-family:var(--mono)">';
+        html += '<div style="font-size:11px;color:var(--blue);font-family:var(--mono);margin-bottom:10px">';
         ns.forEach(function(n){ html += '<div>'+n+'</div>'; });
         html += '</div>';
-      } else {
-        html += '<div style="font-size:11px;color:var(--text3)">NS не установлены (записи регистратора активны)</div>';
       }
+      // Registrar DNS records
+      html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+      html += '<span style="font-size:11px;font-weight:600;color:var(--text2)">DNS записи (Регистратор)</span>';
+      html += '<button class="btn btn-sm" onclick="lhLoadRecords(\''+domId+'\')">🔄 Загрузить</button>';
+      html += '<button class="btn btn-sm btn-primary" onclick="lhAddRecord(\''+domId+'\',\''+name+'\')">+ Запись</button>';
       html += '</div>';
+      html += '<div id="lh-recs-'+domId+'">';
+      const cachedRecs = d.records || d.dns_records || [];
+      if(cachedRecs.length){
+        html += lhRenderRecordsTable(cachedRecs, domId, name);
+      } else {
+        html += '<div style="font-size:11px;color:var(--text3)">Нажмите «Загрузить» для получения DNS записей</div>';
+      }
+      html += '</div></div>';
     }
 
     // ── COMMENT ────────────────────────────────────────────────────
@@ -2102,8 +2119,8 @@ async function lhLoadCfRecs(domId, domName){
   if(el) el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:4px">⟳ Загрузка CF записей...</div>';
   const listRes=await cfReq(token,'GET','/zones?name='+domName);
   if(!listRes.success||!listRes.result||!listRes.result[0]){
-    if(el) el.innerHTML='<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Зона не найдена в CF для '+domName+'</div>';
-    log('warn','['+domName+'] Зона не найдена в CF');
+    if(el) el.innerHTML='<div style="font-size:11px;color:var(--yellow);padding:4px">⚠ Домен не найден в Cloudflare. Нажмите 🚀 Подключить к CF</div>';
+    log('warn','['+domName+'] Домен не найден в Cloudflare');
     return;
   }
   const zone=listRes.result[0], zoneId=zone.id;
@@ -2413,11 +2430,14 @@ function lhToggleSelect(domId){
 }
 
 function lhSelectAll(){
-  lhDomains.forEach(function(d){
-    var id = d.id || d.domainId || d.domain_id || '';
-    if(id) lhSelectedDomains.add(id);
-  });
+  var allIds=lhDomains.map(function(d){return d.id||d.domainId||d.domain_id||'';}).filter(Boolean);
+  if(allIds.length&&allIds.every(function(id){return lhSelectedDomains.has(id);})){
+    lhSelectedDomains.clear();
+  } else {
+    allIds.forEach(function(id){lhSelectedDomains.add(id);});
+  }
   lhRenderDomains();
+  lhUpdateBulkBar();
 }
 
 function lhDeselectAll(){
@@ -3102,7 +3122,7 @@ async function lhSetCfNs(domainId, domain){
 async function cfzLoad(){
   const token=v('cf-tok');
   if(!token){ await uiWarn('Настройте CF API Token в разделе «Настройки»', 'CF не настроен'); go('settings'); return; }
-  log('info','Загрузка зон Cloudflare...');
+  log('info','Загрузка доменов Cloudflare...');
   document.getElementById('cfz-list').innerHTML='<div style="font-size:11px;color:var(--text3);padding:12px;text-align:center">⟳ Загрузка...</div>';
 
   let allZones=[], page=1, totalPages=1;
@@ -3122,10 +3142,10 @@ async function cfzLoad(){
   document.getElementById('cfz-total').textContent=cfZones.length;
   document.getElementById('cfz-active').textContent=active;
   document.getElementById('cfz-pending').textContent=pending;
-  document.getElementById('cfz-cnt').textContent=cfZones.length+' зон';
+  document.getElementById('cfz-cnt').textContent=cfZones.length+' доменов';
   document.getElementById('nb-cfz').textContent=cfZones.length;
   cfzRender();
-  log('ok','Загружено '+cfZones.length+' зон (активных: '+active+', ожидают: '+pending+')');
+  log('ok','Загружено '+cfZones.length+' доменов (активных: '+active+', ожидают: '+pending+')');
 
   // Setup filter
   document.getElementById('cfz-filter').oninput=function(){ cfzRender(); };
@@ -3141,7 +3161,7 @@ function cfzRender(){
   if(fb&&cfZones.length) fb.style.display='flex';
 
   if(!filtered.length){
-    list.innerHTML='<div class="empty"><div class="empty-icon">☁️</div>'+(cfZones.length?'Нет совпадений':'Нет зон')+'</div>';
+    list.innerHTML='<div class="empty"><div class="empty-icon">☁️</div>'+(cfZones.length?'Нет совпадений':'Нет доменов')+'</div>';
     return;
   }
 
@@ -3162,12 +3182,6 @@ function cfzRender(){
     html+='</div>';
 
     html+='<div class="cfz-body" id="cfz-body-'+z.id+'"><div class="cfz-body-inner">';
-    // Comment
-    html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')" style="margin-bottom:10px">';
-    html+='<span class="dom-comment-icon">💬</span>';
-    html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
-    html+='<span class="dom-comment-edit">✏️</span>';
-    html+='</div>';
     // Zone info
     html+='<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">';
     html+='<span style="font-size:10px;color:var(--text3)">ID: <span style="color:var(--text2)">'+z.id+'</span></span>';
@@ -3181,6 +3195,13 @@ function cfzRender(){
       html+='<div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm btn-primary" onclick="cfzLoadRecs(\''+z.id+'\',\''+z.name+'\')">📋 Загрузить DNS записи</button></div>';
     }
     html+='</div>';
+    // Comment at bottom
+    html+='<div style="border-top:1px solid var(--border);padding-top:7px;margin-top:10px">';
+    html+='<div class="dom-comment" data-comment-for="'+z.name+'" onclick="editComment(\''+z.name+'\')">';
+    html+='<span class="dom-comment-icon">💬</span>';
+    html+='<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>';
+    html+='<span class="dom-comment-edit">✏️</span>';
+    html+='</div></div>';
     html+='</div></div>'; // cfz-body-inner + cfz-body
 
     html+='</div>';
