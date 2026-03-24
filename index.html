@@ -772,7 +772,29 @@ function subscribeAll(){
   unsub.comments=db.collection('comments').onSnapshot(snap=>{
     domainComments={};
     snap.docs.forEach(d=>{ domainComments[d.id]=d.data().text||''; });
-    renderDomains(); lhRenderDomains();
+    // Update comment displays inline without full re-render (to preserve open forms)
+    document.querySelectorAll('[data-comment-for]').forEach(function(el){
+      var name=el.dataset.commentFor;
+      var cmt=domainComments[name]||'';
+      // Only update if not currently being edited (no input inside)
+      if(!el.querySelector('input')){
+        el.innerHTML='<span class="dom-comment-icon">💬</span>'
+          +'<span class="dom-comment-text'+(cmt?'':' empty')+'">'+(cmt||'Добавить комментарий...')+'</span>'
+          +'<span class="dom-comment-edit">✏️</span>';
+      }
+    });
+    // Update header comment previews
+    document.querySelectorAll('[data-comment-preview]').forEach(function(el){
+      var name=el.dataset.commentPreview;
+      var cmt=domainComments[name]||'';
+      if(cmt){
+        el.style.display='';
+        el.textContent='💬 '+cmt;
+        el.title=cmt;
+      } else {
+        el.style.display='none';
+      }
+    });
   });
 }
 
@@ -860,7 +882,7 @@ function renderDomains(){
         <div class="d-row-head" onclick="toggleExpand('${d.id}')">
           <input type="checkbox" class="d-checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelect('${d.id}')">
           <span class="d-name">${d.name}</span>
-          ${cmt?`<span style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="${cmt.replace(/"/g,'&quot;')}">💬 ${cmt}</span>`:''}
+          ${cmt?`<span data-comment-preview="${d.name}" style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="${cmt.replace(/"/g,'&quot;')}">💬 ${cmt}</span>`:`<span data-comment-preview="${d.name}" style="display:none"></span>`}
           ${d.addedBy&&d.addedBy!==user?.email?`<span style="font-size:10px;color:var(--text3)">${d.addedBy}</span>`:''}
           ${d.zoneId?`<span class="d-zone">${d.zoneId.slice(0,10)}…</span>`:''}
           ${d.err?`<span style="font-size:10px;color:var(--red);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.err}</span>`:''}
@@ -1808,7 +1830,8 @@ function lhRenderDomains(){
     html += '<div class="d-row-head" onclick="lhToggleExpand(\''+domId+'\')">';
     html += '<input type="checkbox" class="d-checkbox" '+(isSelected?'checked':'')+' onclick="event.stopPropagation();lhToggleSelect(\''+domId+'\')">';
     html += '<span class="d-name" onclick="event.stopPropagation()">'+name+'</span>';
-    if(lhCmt) html += '<span style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+lhCmt.replace(/"/g,'&quot;')+'">💬 '+lhCmt+'</span>';
+    if(lhCmt) html += '<span data-comment-preview="'+name+'" style="font-size:10px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+lhCmt.replace(/"/g,'&quot;')+'">💬 '+lhCmt+'</span>';
+    else html += '<span data-comment-preview="'+name+'" style="display:none"></span>';
     if(exp) html += '<span style="font-size:10px;color:var(--text3)">до '+exp.slice(0,10)+'</span>';
     if(isCfNs) html += '<span style="font-size:10px;color:var(--accent);background:rgba(246,130,31,.12);padding:1px 6px;border-radius:3px;border:1px solid rgba(246,130,31,.25)">☁ CF</span>';
     else if(hasNs) html += '<span style="font-size:10px;color:var(--blue);background:rgba(91,164,255,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(91,164,255,.2)">NS</span>';
@@ -2521,7 +2544,8 @@ function cfzRender(){
     let html='<div class="cfz-row">';
     html+='<div class="cfz-head" onclick="cfzToggle(\''+z.id+'\')">';
     html+='<span class="d-name">'+z.name+'</span>';
-    if(cmt) html+='<span style="font-size:10px;color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+cmt.replace(/"/g,'&quot;')+'">💬 '+cmt+'</span>';
+    if(cmt) html+='<span data-comment-preview="'+z.name+'" style="font-size:10px;color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.7" title="'+cmt.replace(/"/g,'&quot;')+'">💬 '+cmt+'</span>';
+    else html+='<span data-comment-preview="'+z.name+'" style="display:none"></span>';
     html+='<span class="cfz-status '+stCls+'">'+stLbl+'</span>';
     if(ns) html+='<span style="font-size:10px;color:var(--text3);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ns+'</span>';
     html+='<span class="d-expand'+(exp?' open':'')+'">▶</span>';
@@ -2640,7 +2664,7 @@ async function cfzAddRec(zoneId, zoneName){
   const content=document.getElementById('cfz-val-'+zoneId).value.trim();
   const ttl=parseInt(document.getElementById('cfz-ttl-'+zoneId).value)||1;
   const proxied=document.getElementById('cfz-proxy-'+zoneId).checked;
-  if(!content){ await uiWarn('Введите значение','Пустое значение'); return; }
+  if(!content){ return; }
 
   log('info','['+zoneName+'] Добавляю '+type+' '+name+'...');
   const body={type:type, name:name==='@'?zoneName:name, content:content, ttl:ttl};
@@ -2653,35 +2677,48 @@ async function cfzAddRec(zoneId, zoneName){
   } else {
     const msg=res.errors?.[0]?.message||'ошибка';
     log('err','['+zoneName+'] '+msg);
-    await uiError(msg, 'Ошибка');
   }
 }
 
-async function cfzEditRec(zoneId, recId, zoneName){
-  const token=v('cf-tok');
-  const recs=cfZoneRecs[zoneId]||[];
-  const rec=recs.find(function(r){ return r.id===recId; });
+function cfzEditRec(zoneId, recId, zoneName){
+  var recs=cfZoneRecs[zoneId]||[];
+  var rec=recs.find(function(r){ return r.id===recId; });
   if(!rec) return;
 
-  const shortName=rec.name.replace('.'+zoneName,'');
-  const displayName=shortName===zoneName?'@':shortName;
+  var shortName=rec.name.replace('.'+zoneName,'');
+  var displayName=shortName===zoneName?'@':shortName;
+  var isProxiable=['A','AAAA','CNAME'].includes(rec.type);
 
-  const type=prompt('Тип (A/AAAA/CNAME/MX/TXT):', rec.type);
-  if(!type) return;
-  const name=prompt('Имя:', displayName);
-  if(name===null) return;
-  const content=prompt('Значение:', rec.content);
+  // Insert inline edit form after the records table
+  var container=document.getElementById('cfz-recs-'+zoneId);
+  if(!container) return;
+  if(document.getElementById('cfz-edit-'+zoneId)) document.getElementById('cfz-edit-'+zoneId).remove();
+
+  var html='<div id="cfz-edit-'+zoneId+'" style="display:grid;gap:6px;align-items:end;grid-template-columns:80px 100px 1fr 60px auto auto;border:1px solid var(--accent);border-radius:6px;padding:8px;margin-top:6px;background:var(--bg3)">';
+  html+='<div class="field"><div class="add-lbl">Тип</div><select id="cfz-et-'+zoneId+'"><option'+(rec.type==='A'?' selected':'')+'>A</option><option'+(rec.type==='AAAA'?' selected':'')+'>AAAA</option><option'+(rec.type==='CNAME'?' selected':'')+'>CNAME</option><option'+(rec.type==='MX'?' selected':'')+'>MX</option><option'+(rec.type==='TXT'?' selected':'')+'>TXT</option></select></div>';
+  html+='<div class="field"><div class="add-lbl">Имя</div><input type="text" id="cfz-en-'+zoneId+'" value="'+displayName+'"></div>';
+  html+='<div class="field"><div class="add-lbl">Значение</div><input type="text" id="cfz-ev-'+zoneId+'" value="'+rec.content.replace(/"/g,'&quot;')+'"></div>';
+  html+='<div class="field"><div class="add-lbl">TTL</div><input type="number" id="cfz-el-'+zoneId+'" value="'+rec.ttl+'" min="1"></div>';
+  html+='<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">Proxy</div><label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cfz-ep-'+zoneId+'"'+(rec.proxied?' checked':'')+' style="width:auto;accent-color:var(--accent)"'+(isProxiable?'':' disabled')+'><span style="font-size:10px;color:var(--accent)">'+(isProxiable?'':'—')+'</span></label></div>';
+  html+='<div class="field" style="justify-content:flex-end;padding-bottom:1px"><div class="add-lbl">&nbsp;</div><div style="display:flex;gap:4px"><button class="btn btn-primary btn-sm" onclick="cfzSubmitEdit(\''+zoneId+'\',\''+recId+'\',\''+zoneName+'\')">✓</button><button class="btn btn-sm" onclick="document.getElementById(\'cfz-edit-'+zoneId+'\').remove()">✕</button></div></div>';
+  html+='</div>';
+  container.insertAdjacentHTML('beforeend', html);
+  document.getElementById('cfz-ev-'+zoneId).focus();
+}
+
+async function cfzSubmitEdit(zoneId, recId, zoneName){
+  var token=v('cf-tok');
+  var type=(document.getElementById('cfz-et-'+zoneId).value||'A').toUpperCase();
+  var name=document.getElementById('cfz-en-'+zoneId).value.trim()||'@';
+  var content=document.getElementById('cfz-ev-'+zoneId).value.trim();
+  var ttl=parseInt(document.getElementById('cfz-el-'+zoneId).value)||1;
+  var proxied=document.getElementById('cfz-ep-'+zoneId).checked;
   if(!content) return;
-  const ttl=parseInt(prompt('TTL (1=Авто):', rec.ttl))||1;
-  let proxied=rec.proxied;
-  if(['A','AAAA','CNAME'].includes(type.toUpperCase())){
-    proxied=await uiConfirm('Включить Cloudflare Proxy?','Proxy',{icon:'☁️',okText:'Включить',cancelText:'Выключить'});
-  }
 
   log('info','['+zoneName+'] Обновляю запись...');
-  const body={type:type.toUpperCase(), name:name==='@'?zoneName:name, content:content, ttl:ttl};
-  if(['A','AAAA','CNAME'].includes(type.toUpperCase())) body.proxied=proxied;
-  const res=await cfReq(token,'PUT','/zones/'+zoneId+'/dns_records/'+recId, body);
+  var body={type:type, name:name==='@'?zoneName:name, content:content, ttl:ttl};
+  if(['A','AAAA','CNAME'].includes(type)) body.proxied=proxied;
+  var res=await cfReq(token,'PUT','/zones/'+zoneId+'/dns_records/'+recId, body);
   if(res.success){
     log('ok','['+zoneName+'] Запись обновлена');
     await cfzLoadRecs(zoneId, zoneName);
