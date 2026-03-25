@@ -2199,9 +2199,8 @@ async function lhLoadCfRecs(domId, domName){
   lhCfRecs[domName]={zoneId,domId,recs};
   if(el) el.innerHTML=lhRenderCfTable(lhCfRecs[domName],domName);
   log('ok','['+domName+'] CF DNS записей: '+recs.length);
-  // Auto-fetch SSL mode (don't await — background)
-  if(!cfSslCache[domName]) cfGetSsl(zoneId,domName);
-  else lhRenderDomains(); // redraw to show SSL selector with cached value
+  lhRenderDomains(); // redraw CF status bar so SSL selector appears (zoneId now known)
+  if(!cfSslCache[domName]) cfGetSsl(zoneId,domName); // fetch SSL in background, will populate selector
 }
 
 async function lhConnectToCF(domId, domName){
