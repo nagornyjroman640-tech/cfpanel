@@ -435,12 +435,25 @@ nav{flex:1;padding:8px;overflow-y:auto}
         <div class="info-box"><span>ℹ️</span><span>Шаблон автоматически применяется ко всем новым доменам при добавлении (если включена галочка). Также можно применить его вручную к выбранным доменам.</span></div>
         <div class="card">
           <div class="card-head"><span>⚡</span><span class="card-title">Быстрые шаблоны</span></div>
-          <div class="card-body"><div class="tpl-btns">
-            <button class="btn" onclick="applyTpl('basic')">🌐 Сайт (@ + www)</button>
-            <button class="btn" onclick="applyTpl('mail')">📧 + mail</button>
-            <button class="btn" onclick="applyTpl('full')">⚡ Полный</button>
-            <button class="btn btn-danger" onclick="clearTpl()">🗑 Очистить шаблон</button>
-          </div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <div class="tpl-btns">
+              <button class="btn" onclick="applyTpl('basic')">🌐 Сайт (@ + www)</button>
+              <button class="btn" onclick="applyTpl('mail')">📧 + mail</button>
+              <button class="btn" onclick="applyTpl('full')">⚡ Полный</button>
+              <button class="btn btn-danger" onclick="clearTpl()">🗑 Очистить шаблон</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--text2);font-weight:600">🔒 SSL при деплое:</span>
+              <select id="tpl-ssl" onchange="saveTplSsl()" style="font-size:12px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text)">
+                <option value="">— Не менять —</option>
+                <option value="off">🔓 Off</option>
+                <option value="flexible">🔒 Flexible</option>
+                <option value="full">🔐 Full</option>
+                <option value="strict">🛡 Full (Strict)</option>
+              </select>
+              <span style="font-size:11px;color:var(--text3)">Применяется при деплое и авто-подключении к CF</span>
+            </div>
+          </div>
         </div>
         <div class="card">
           <div class="card-head"><span>📋</span><span class="card-title">Записи шаблона</span><span class="card-meta" id="t-cnt">0 записей</span></div>
@@ -710,6 +723,7 @@ let lhExpandedDomainId=null;
 let lhSelectedDomains=new Set();
 let lhCfRecs={}; // domName → {zoneId, domId, recs[]}
 let cfZones=[], cfZoneRecs={}, cfExpandedZoneId=null;
+let cfSslCache={}; // domainName → ssl mode string
 let domainComments={};
 let PROXY_URL='https://cf-panel-proxy.alexander-osipov89.workers.dev';
 
@@ -862,6 +876,18 @@ function loadCF(){
       if(doc.data().token) document.getElementById('lh-token').value=doc.data().token;
       if(doc.data().jwt) document.getElementById('lh-jwt').value=doc.data().jwt;
       if(doc.data().contactId) document.getElementById('lh-contact-id').value=doc.data().contactId;
+    }
+    // Auto-load LuxHost on startup if token is available and not yet loaded
+    if(!go._lhLoaded && doc.exists && doc.data().token){
+      go._lhLoaded=true;
+      lhGetDomains(); lhGetBalance();
+      if(go._lhTimer){clearInterval(go._lhTimer);go._lhTimer=null;}
+      go._lhTimer=setInterval(function(){lhGetDomains();lhGetBalance();},60000);
+    }
+  });
+  db.collection('settings').doc('template').get().then(doc=>{
+    if(doc.exists && doc.data().sslMode!==undefined){
+      const el=document.getElementById('tpl-ssl'); if(el) el.value=doc.data().sslMode||'';
     }
   });
 }
@@ -1300,6 +1326,13 @@ async function startDeploy(){
           if(rr.success) log('ok',`[${d.name}] ${rec.type} ${rec.name}→${rec.value} ${rec.proxied?'🟠':'⚪'}`);
           else log('warn',`[${d.name}] ${rec.type}: ${rr.errors?.[0]?.message}`);
         }
+      }
+      // Apply SSL from template setting
+      const _sslMode=v('tpl-ssl');
+      if(_sslMode&&zoneId){
+        const _sr=await cfReq(token,'PATCH',`/zones/${zoneId}/settings/ssl`,{value:_sslMode});
+        if(_sr.success) log('ok',`[${d.name}] SSL → ${_sslMode}`);
+        else log('warn',`[${d.name}] SSL не применён: ${_sr.errors?.[0]?.message||'?'}`);
       }
       await db.collection('domains').doc(d.id).update({status:'done',zoneId:zoneId||null}); done++;
     }catch(e){
@@ -1895,6 +1928,20 @@ async function autoSetupDomain(domain, domainId){
   }
   if(recs.length) log('ok', '['+domain+'] Применено '+recs.length+' DNS записей');
 
+  // Apply SSL from template setting
+  const _autoSslMode=v('tpl-ssl');
+  if(_autoSslMode){
+    try{
+      const _sr=await fetch(PROXY_URL+'/zones/'+zoneId+'/settings/ssl',{
+        method:'PATCH',headers:{'Content-Type':'application/json','X-Target':'cloudflare','X-API-Key':cfToken},
+        body:JSON.stringify({value:_autoSslMode})
+      });
+      const _sd=await _sr.json();
+      if(_sd.success) log('ok','['+domain+'] SSL → '+_autoSslMode);
+      else log('warn','['+domain+'] SSL не применён: '+(_sd.errors?.[0]?.message||'?'));
+    }catch(e){ log('warn','['+domain+'] SSL ошибка: '+e.message); }
+  }
+
   // Set NS at LuxHost via smart multi-strategy
   if(domainId && nsServers.length){
     log('info', '['+domain+'] Меняем NS у LuxHost...');
@@ -2009,6 +2056,8 @@ function lhRenderDomains(){
       html += '<button class="btn btn-sm" onclick="lhApplyCfTemplate(\''+domId+'\',\''+name+'\')" title="Применить шаблон DNS к CF зоне">📋 Шаблон</button>';
       html += '<button class="btn btn-sm" onclick="lhLoadCfRecs(\''+domId+'\',\''+name+'\')" title="Загрузить DNS из Cloudflare">🔄 DNS</button>';
       html += '<button class="btn btn-sm" onclick="lhSetRegistrarNs(\''+domId+'\',\''+name+'\')" title="Вернуть NS регистратора (отключить CF)">↩ NS Рег.</button>';
+      const _lhZoneId=(lhCfRecs[name]&&lhCfRecs[name].zoneId)||'';
+      if(_lhZoneId) html+=_sslSelectHtml('lh-ssl-'+domId,_lhZoneId,name);
     } else {
       html += '<span style="font-size:13px">❌</span>';
       html += '<span style="font-size:12px;font-weight:700;color:var(--text2)">Не подключён к CF</span>';
@@ -2150,6 +2199,9 @@ async function lhLoadCfRecs(domId, domName){
   lhCfRecs[domName]={zoneId,domId,recs};
   if(el) el.innerHTML=lhRenderCfTable(lhCfRecs[domName],domName);
   log('ok','['+domName+'] CF DNS записей: '+recs.length);
+  // Auto-fetch SSL mode (don't await — background)
+  if(!cfSslCache[domName]) cfGetSsl(zoneId,domName);
+  else lhRenderDomains(); // redraw to show SSL selector with cached value
 }
 
 async function lhConnectToCF(domId, domName){
@@ -2437,8 +2489,9 @@ function lhToggleExpand(domId){
       const name=d.domain||d.name||d.id;
       const ns=d.nameservers||d.ns||[];
       const isCfNs=ns.length&&ns.join(',').toLowerCase().includes('cloudflare');
-      if(isCfNs&&!lhCfRecs[name]&&v('cf-tok')){
-        lhLoadCfRecs(domId,name);
+      if(isCfNs&&v('cf-tok')){
+        if(!lhCfRecs[name]) lhLoadCfRecs(domId,name);
+        else if(lhCfRecs[name].zoneId&&!cfSslCache[name]) cfGetSsl(lhCfRecs[name].zoneId,name);
       }
     }
   }
@@ -2822,11 +2875,15 @@ async function lhSubmitEditRecord(domId, domName, recId){
     ttl: ttl
   });
 
-  if(data && !data.error){
+  const _editOk=data&&(data.success||data.status==='ok'||data.status==='success'||(!data.error&&!data.errors&&data.success!==false));
+  if(_editOk){
     log('ok', '['+domName+'] Запись обновлена');
+    var form=document.getElementById('lh-edit-form-'+domId); if(form) form.remove();
     await lhLoadRecords(domId);
   } else {
-    log('err', '['+domName+'] Ошибка: '+(data ? (data.error||data.message||JSON.stringify(data)) : 'нет ответа'));
+    const _editErr=data?(data.error||data.message||data.msg||JSON.stringify(data)):'нет ответа';
+    log('err', '['+domName+'] Ошибка: '+_editErr);
+    await uiError('Не удалось обновить запись: '+_editErr,'Ошибка API');
   }
 }
 
@@ -3159,6 +3216,69 @@ async function lhSetCfNs(domainId, domain){
 }
 
 
+// ══ SSL MANAGEMENT ══
+async function cfGetSsl(zoneId, domName){
+  const token=v('cf-tok');
+  if(!token||!zoneId) return;
+  const res=await cfReq(token,'GET','/zones/'+zoneId+'/settings/ssl');
+  if(res.success&&res.result){
+    cfSslCache[domName]=res.result.value;
+    // Update CF Domains tab selector
+    const cfzSel=document.getElementById('cfz-ssl-'+zoneId);
+    if(cfzSel) cfzSel.value=res.result.value;
+    // Update LuxHost tab selector (uses domId)
+    const cached=lhCfRecs[domName];
+    if(cached&&cached.domId){
+      const lhSel=document.getElementById('lh-ssl-'+cached.domId);
+      if(lhSel) lhSel.value=res.result.value;
+    }
+  }
+}
+
+async function cfSetSsl(zoneId, domName, value){
+  const token=v('cf-tok');
+  if(!token||!value) return;
+  const res=await cfReq(token,'PATCH','/zones/'+zoneId+'/settings/ssl',{value});
+  if(res.success){
+    cfSslCache[domName]=value;
+    log('ok','['+domName+'] SSL → '+value);
+  } else {
+    const msg=res.errors?.[0]?.message||'ошибка';
+    log('err','['+domName+'] SSL ошибка: '+msg);
+    await uiError('Не удалось изменить SSL: '+msg,'Ошибка SSL');
+    // Revert selector
+    const cfzSel=document.getElementById('cfz-ssl-'+zoneId);
+    if(cfzSel) cfzSel.value=cfSslCache[domName]||'';
+    const cached=lhCfRecs[domName];
+    if(cached&&cached.domId){
+      const lhSel=document.getElementById('lh-ssl-'+cached.domId);
+      if(lhSel) lhSel.value=cfSslCache[domName]||'';
+    }
+  }
+}
+
+function _sslSelectHtml(elId, zoneId, domName){
+  const cur=cfSslCache[domName]||'';
+  const opt=function(v,l){ return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+l+'</option>'; };
+  return '<div style="display:flex;align-items:center;gap:5px">'
+    +'<span style="font-size:11px;color:var(--text3)">🔒 SSL:</span>'
+    +'<select id="'+elId+'" onchange="cfSetSsl(\''+zoneId+'\',\''+domName+'\',this.value)" '
+    +'style="font-size:11px;padding:2px 6px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer">'
+    +(cur?'':'<option value="" disabled selected>⟳...</option>')
+    +opt('off','🔓 Off')
+    +opt('flexible','🔒 Flexible')
+    +opt('full','🔐 Full')
+    +opt('strict','🛡 Full (Strict)')
+    +'</select>'
+    +'</div>';
+}
+
+async function saveTplSsl(){
+  const mode=v('tpl-ssl');
+  await db.collection('settings').doc('template').set({sslMode:mode||'',updatedBy:user.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  log('ok','SSL шаблона: '+(mode||'не задан'));
+}
+
 // ══ CF ZONES ══
 async function cfzLoad(){
   const token=v('cf-tok');
@@ -3224,9 +3344,10 @@ function cfzRender(){
 
     html+='<div class="cfz-body" id="cfz-body-'+z.id+'"><div class="cfz-body-inner">';
     // Zone info
-    html+='<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">';
+    html+='<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:center">';
     html+='<span style="font-size:10px;color:var(--text3)">ID: <span style="color:var(--text2)">'+z.id+'</span></span>';
     if(z.name_servers) html+='<span style="font-size:10px;color:var(--text3)">NS: <span style="color:var(--blue)">'+z.name_servers.join(', ')+'</span></span>';
+    html+='<span style="margin-left:auto">'+_sslSelectHtml('cfz-ssl-'+z.id,z.id,z.name)+'</span>';
     html+='</div>';
     // Records container
     html+='<div id="cfz-recs-'+z.id+'">';
@@ -3265,10 +3386,10 @@ function cfzToggle(zoneId){
     if(prev) _closePanel(document.getElementById('cfz-body-'+prev),document.getElementById('cfz-da-'+prev));
     cfExpandedZoneId=zoneId;
     _openPanel(document.getElementById('cfz-body-'+zoneId),document.getElementById('cfz-da-'+zoneId));
-    // Auto-load DNS records if not cached
-    if(!cfZoneRecs[zoneId]){
-      const z=cfZones.find(function(z){ return z.id===zoneId; });
-      if(z) cfzLoadRecs(zoneId,z.name);
+    const z=cfZones.find(function(z){ return z.id===zoneId; });
+    if(z){
+      if(!cfZoneRecs[zoneId]) cfzLoadRecs(zoneId,z.name);
+      if(!cfSslCache[z.name]) cfGetSsl(zoneId,z.name);
     }
   }
 }
@@ -3352,7 +3473,7 @@ async function cfzAddRec(zoneId, zoneName){
   const content=document.getElementById('cfz-val-'+zoneId).value.trim();
   const ttl=parseInt(document.getElementById('cfz-ttl-'+zoneId).value)||1;
   const proxied=document.getElementById('cfz-proxy-'+zoneId).checked;
-  if(!content){ return; }
+  if(!content){ await uiWarn('Введите значение записи (IP или имя хоста)','Пустое значение'); return; }
 
   log('info','['+zoneName+'] Добавляю '+type+' '+name+'...');
   const body={type:type, name:name==='@'?zoneName:name, content:content, ttl:ttl};
