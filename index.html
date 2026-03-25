@@ -686,6 +686,7 @@ nav{flex:1;padding:8px;overflow-y:auto}
                 <button class="btn btn-sm btn-primary" onclick="lhBulkDeploy()">🚀 Полный деплой</button>
                 <button class="btn btn-sm" onclick="lhBulkSetNs()" style="color:var(--blue);border-color:rgba(91,164,255,.3)">☁ NS → CF</button>
                 <button class="btn btn-sm" onclick="lhBulkApplyTemplate()" style="color:var(--green);border-color:rgba(62,207,142,.3)">📋 Шаблон → CF</button>
+                <button class="btn btn-sm" onclick="lhBulkSetSsl()" style="color:var(--yellow);border-color:rgba(255,211,42,.3)">🔒 SSL</button>
                 <button class="btn btn-sm" onclick="lhBulkCopyNames()">📋 Копировать</button>
                 <button class="btn btn-sm" onclick="lhSelectAll()">☑ Все</button>
                 <button class="btn btn-sm" onclick="lhDeselectAll()">☐ Снять</button>
@@ -2745,6 +2746,75 @@ async function lhBulkApplyTemplate(){
   lhDeselectAll();
 }
 
+// ── BULK: Set SSL mode for CF domains ──
+async function lhBulkSetSsl(){
+  if(!lhSelectedDomains.size){ return; }
+  var token=v('cf-tok');
+  if(!token){ await uiWarn('Настройте CF API Token','CF не настроен'); go('settings'); return; }
+
+  var selected=[];
+  lhSelectedDomains.forEach(function(id){
+    var d=lhDomains.find(function(x){ return (x.id||x.domainId||x.domain_id)===id; });
+    if(d) selected.push(d);
+  });
+
+  // Only CF-connected domains (CF nameservers)
+  var cfDomains=selected.filter(function(d){
+    var ns=(d.nameservers||d.ns||[]).join(' ').toLowerCase();
+    return ns.includes('cloudflare');
+  });
+
+  if(!cfDomains.length){
+    await uiWarn('Ни один из выбранных доменов не подключён к CF (нет CF nameservers).','Нет CF доменов');
+    return;
+  }
+
+  var ok=await uiConfirm(
+    'Выбрать SSL режим для <b>'+cfDomains.length+'</b> CF доменов:<br><br>'
+    +'<select id="bulk-ssl-sel" style="width:100%;padding:6px 10px;margin-top:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">'
+    +'<option value="off">🔓 Off</option>'
+    +'<option value="flexible" selected>🔒 Flexible</option>'
+    +'<option value="full">🔐 Full</option>'
+    +'<option value="strict">🛡 Full (Strict)</option>'
+    +'</select>',
+    '🔒 Массовая смена SSL',
+    {icon:'🔒', okText:'Применить'}
+  );
+  if(!ok) return;
+
+  var mode=(document.getElementById('bulk-ssl-sel')||{}).value||'flexible';
+  log('info','▶ SSL → '+mode+': '+cfDomains.length+' доменов...');
+  var done=0, errs=0;
+
+  for(var i=0;i<cfDomains.length;i++){
+    var d=cfDomains[i];
+    var name=d.domain||d.name||'';
+    var domId=d.id||d.domainId||d.domain_id||'';
+    var zoneId=lhCfRecs[name]&&lhCfRecs[name].zoneId;
+    if(!zoneId){
+      try{
+        var lr=await cfReq(token,'GET','/zones?name='+name);
+        if(lr.success&&lr.result&&lr.result.length){
+          zoneId=lr.result[0].id;
+          if(!lhCfRecs[name]) lhCfRecs[name]={zoneId,domId,recs:[]};
+          else lhCfRecs[name].zoneId=zoneId;
+        }
+      }catch(e){}
+    }
+    if(!zoneId){ log('warn','['+name+'] зона CF не найдена, пропуск'); errs++; continue; }
+    try{
+      var res=await cfReq(token,'PATCH','/zones/'+zoneId+'/settings/ssl',{value:mode});
+      if(res.success){ cfSslCache[name]=mode; log('ok','['+name+'] SSL → '+mode); done++; }
+      else { log('err','['+name+'] SSL: '+((res.errors&&res.errors[0]&&res.errors[0].message)||'ошибка')); errs++; }
+    }catch(e){ log('err','['+name+'] SSL: '+e.message); errs++; }
+    await sleep(300);
+  }
+
+  log('info','■ SSL завершён — успешно: '+done+', ошибок: '+errs);
+  lhRenderDomains();
+  lhDeselectAll();
+}
+
 async function lhLoadRecords(domId){
   log('info', 'Загрузка записей домена '+domId+'...');
   const el = document.getElementById('lh-recs-'+domId);
@@ -3242,8 +3312,9 @@ async function cfSetSsl(zoneId, domName, value){
     cfSslCache[domName]=value;
     log('ok','['+domName+'] SSL → '+value);
   } else {
-    const msg=res.errors?.[0]?.message||'ошибка';
-    log('err','['+domName+'] SSL ошибка: '+msg);
+    const err=res.errors?.[0]||{};
+    const msg=(err.code?'['+err.code+'] ':'')+( err.message||'ошибка');
+    log('err','['+domName+'] SSL ошибка: '+msg+' | raw: '+JSON.stringify(res.errors));
     await uiError('Не удалось изменить SSL: '+msg,'Ошибка SSL');
     // Revert selector
     const cfzSel=document.getElementById('cfz-ssl-'+zoneId);
